@@ -1,0 +1,137 @@
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Broadcasting Driver
+    |--------------------------------------------------------------------------
+    |
+    | This option controls the default broadcaster that will be used by the
+    | framework when an event needs to be broadcast. You may set this to
+    | any of the connections defined in the "connections" array below.
+    |
+    | Supported: "websocket", "redis", "null"
+    |
+    */
+
+    'default' => env('BROADCAST_DRIVER', 'websocket'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Broadcast Connections
+    |--------------------------------------------------------------------------
+    |
+    | Here you may define all of the broadcast connections that will be used
+    | to broadcast events to other systems or over websockets. Each connection
+    | option is configured with a "driver" option to identify how the driver
+    | will broadcast the message.
+    |
+    */
+
+    'connections' => [
+
+        'websocket' => [
+            'driver' => 'websocket',
+            'host' => env('WEBSOCKET_HOST', '127.0.0.1'),
+            'port' => env('WEBSOCKET_PORT', 6001),
+            'ssl' => env('WEBSOCKET_SSL', false),
+            'ssl_cert' => env('WEBSOCKET_SSL_CERT'),
+            'ssl_key' => env('WEBSOCKET_SSL_KEY'),
+            'allow_self_signed' => env('WEBSOCKET_ALLOW_SELF_SIGNED', false),
+        ],
+
+        'redis' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_URL', 'redis://127.0.0.1:6379'),
+            'prefix' => env('REDIS_PREFIX', 'airbend:'),
+            'options' => [
+                'parameters' => [
+                    'password' => env('REDIS_PASSWORD', null),
+                    'database' => env('REDIS_DB', 1),
+                ],
+            ],
+        ],
+
+        'null' => [
+            'driver' => 'null',
+        ],
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | WebSocket Server Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration specific to the WebSocket broadcasting server.
+    |
+    */
+
+    'websocket' => [
+        'host' => env('WEBSOCKET_HOST', '127.0.0.1'),
+        'port' => env('WEBSOCKET_PORT', 6001),
+        'ssl' => env('WEBSOCKET_SSL', false),
+        'ssl_cert' => env('WEBSOCKET_SSL_CERT'),
+        'ssl_key' => env('WEBSOCKET_SSL_KEY'),
+        'allow_self_signed' => env('WEBSOCKET_ALLOW_SELF_SIGNED', false),
+
+        // Application credentials for authentication
+        'app_key' => env('WEBSOCKET_APP_KEY', 'doppar-app-key'),
+        'app_secret' => env('WEBSOCKET_APP_SECRET', 'doppar-app-secret'),
+
+        // Redis pub/sub channel for broadcasting
+        'pubsub_channel' => env('WEBSOCKET_PUBSUB_CHANNEL', 'doppar-broadcast'),
+
+        // Connection limits
+        'max_connections' => env('WEBSOCKET_MAX_CONNECTIONS', 1000),
+        'connection_timeout' => env('WEBSOCKET_CONNECTION_TIMEOUT', 180),
+
+        // Heartbeat settings
+        'heartbeat_interval' => env('WEBSOCKET_HEARTBEAT_INTERVAL', 30),
+
+        // Allowed origins for CORS
+        'allowed_origins' => [
+            '*', // Allow all origins (restrict in production)
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Channel Authorization
+    |--------------------------------------------------------------------------
+    |
+    | Define channel authorization callbacks. These callbacks determine
+    | if a user is authorized to join private or presence channels.
+    |
+    */
+
+    'authorize' => [
+        'endpoint' => '/airbend/auth',
+        'middleware' => ['auth'],
+        'enabled' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Redis Connection Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for Redis connections used by the broadcast system.
+    |
+    */
+
+    'connections' => [
+        'redis' => [
+            'connection' => env('REDIS_URL', 'redis://127.0.0.1:6379'),
+            'prefix' => env('REDIS_PREFIX', 'airbend:'),
+            'options' => [
+                'parameters' => [
+                    'password' => env('REDIS_PASSWORD', null),
+                    'database' => env('REDIS_DB', 1),
+                ],
+            ],
+        ],
+    ],
+
+];

@@ -1,0 +1,44 @@
+{
+    "name": "doppar/bloom",
+    "description": "Doppar Bloom is a high-performance package for probabilistic",
+    "type": "library",
+    "license": "MIT",
+    "support": {
+        "issues": "https://github.com/doppar/bloom/issues",
+        "source": "https://github.com/doppar/bloom"
+    },
+    "authors": [
+        {
+            "name": "Mahedi Hasan",
+            "email": "mahedy150101@gmail.com"
+        }
+    ],
+    "require": {
+        "cboden/ratchet": "^0.4.4",
+        "predis/predis": "^3.3",
+        "react/event-loop": "^1.6",
+        "react/socket": "^1.17"
+    },
+    "require-dev": {
+        "mockery/mockery": "^1.6",
+        "phpunit/phpunit": "^12.1.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Doppar\\Broadcast\\": "src/"
+        },
+        "files": [
+            "src/Helpers/broadcast.php"
+        ]
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "1.x-dev"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
