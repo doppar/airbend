@@ -1,12 +1,8 @@
 {
-    "name": "doppar/bloom",
+    "name": "doppar/airbend",
     "description": "Doppar Bloom is a high-performance package for probabilistic",
     "type": "library",
     "license": "MIT",
-    "support": {
-        "issues": "https://github.com/doppar/bloom/issues",
-        "source": "https://github.com/doppar/bloom"
-    },
     "authors": [
         {
             "name": "Mahedi Hasan",
@@ -14,10 +10,8 @@
         }
     ],
     "require": {
-        "cboden/ratchet": "^0.4.4",
-        "predis/predis": "^3.3",
-        "react/event-loop": "^1.6",
-        "react/socket": "^1.17"
+        "workerman/workerman": "^5.1",
+        "predis/predis": "^3.3"
     },
     "require-dev": {
         "mockery/mockery": "^1.6",
@@ -25,7 +19,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Doppar\\Broadcast\\": "src/"
+            "Doppar\\Airbend\\": "src/"
         },
         "files": [
             "src/Helpers/broadcast.php"

@@ -2,14 +2,14 @@
 
 namespace Doppar\Airbend\Broadcasting;
 
-use Ratchet\MessageComponentInterface;
-use Ratchet\ConnectionInterface;
+use Workerman\Connection\TcpConnection;
+
 use Phaseolies\Support\Facades\Log;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesPresence;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesChannels;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesAuthentication;
 
-class WebSocketHandler implements MessageComponentInterface
+class WebSocketHandler
 {
     use HandlesAuthentication,
         HandlesChannels,
@@ -65,15 +65,16 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Handle new connection
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @return void
      */
-    public function onOpen(ConnectionInterface $conn): void
+    public function onOpen(TcpConnection $conn): void
     {
         $this->clients->attach($conn);
 
         $socketId = $this->generateSocketId();
-        $this->clientMetadata[$conn->resourceId] = [
+        $connectionId = spl_object_id($conn);
+        $this->clientMetadata[$connectionId] = [
             'socket_id' => $socketId,
             'auth_data' => null,
             'last_heartbeat' => time(),
@@ -89,17 +90,17 @@ class WebSocketHandler implements MessageComponentInterface
             ]),
         ]);
 
-        Log::info("WebSocket connection opened: {$conn->resourceId} (socket: {$socketId})");
+        Log::info("WebSocket connection opened: {$connectionId} (socket: {$socketId})");
     }
 
     /**
      * Handle incoming message
      *
-     * @param ConnectionInterface $from
+     * @param TcpConnection $from
      * @param string $msg
      * @return void
      */
-    public function onMessage(ConnectionInterface $from, $msg): void
+    public function onMessage(TcpConnection $from, $msg): void
     {
         try {
             $data = json_decode($msg, true);
@@ -114,7 +115,8 @@ class WebSocketHandler implements MessageComponentInterface
             $eventData = $data['data'] ?? [];
 
             // Update last activity
-            $this->clientMetadata[$from->resourceId]['last_heartbeat'] = time();
+            $fromId = spl_object_id($from);
+            $this->clientMetadata[$fromId]['last_heartbeat'] = time();
 
             // Route the message based on event type
             match ($event) {
@@ -133,29 +135,33 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Handle connection close
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @return void
      */
-    public function onClose(ConnectionInterface $conn): void
+    public function onClose(TcpConnection $conn): void
     {
+        $connectionId = spl_object_id($conn);
+
         $this->removeFromAllChannels($conn);
         $this->clients->detach($conn);
 
-        unset($this->clientMetadata[$conn->resourceId]);
+        unset($this->clientMetadata[$connectionId]);
 
-        Log::info("WebSocket connection closed: {$conn->resourceId}");
+        Log::info("WebSocket connection closed: {$connectionId}");
     }
 
     /**
      * Handle connection error
      *
-     * @param ConnectionInterface $conn
-     * @param \Exception $e
+     * @param TcpConnection $conn
+     * @param \Throwable $e
      * @return void
      */
-    public function onError(ConnectionInterface $conn, \Exception $e): void
+    public function onError(TcpConnection $conn, \Throwable $e): void
     {
-        Log::error("WebSocket error on connection {$conn->resourceId}: " . $e->getMessage());
+        $connectionId = spl_object_id($conn);
+
+        Log::error("WebSocket error on connection {$connectionId}: " . $e->getMessage());
 
         $conn->close();
     }
@@ -163,12 +169,12 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Handle channel subscription
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @param string|null $channel
      * @param array $data
      * @return void
      */
-    protected function handleSubscribe(ConnectionInterface $conn, ?string $channel, array $data): void
+    protected function handleSubscribe(TcpConnection $conn, ?string $channel, array $data): void
     {
         if (!$channel) {
             $this->sendError($conn, 'Channel name required');
@@ -188,35 +194,36 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Subscribe to public channel
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @param string $channel
      * @return void
      */
-    protected function subscribeToPublicChannel(ConnectionInterface $conn, string $channel): void
+    protected function subscribeToPublicChannel(TcpConnection $conn, string $channel): void
     {
         if (!isset($this->channels[$channel])) {
             $this->channels[$channel] = [];
         }
 
         $this->channels[$channel][] = $conn;
-        $this->clientMetadata[$conn->resourceId]['subscribed_channels'][] = $channel;
+        $connectionId = spl_object_id($conn);
+        $this->clientMetadata[$connectionId]['subscribed_channels'][] = $channel;
 
         $this->sendToClient($conn, [
             'event' => 'doppar:subscription_succeeded',
             'channel' => $channel,
         ]);
 
-        Log::info("Client {$conn->resourceId} subscribed to public channel: {$channel}");
+        Log::info("Client {$connectionId} subscribed to public channel: {$channel}");
     }
 
     /**
      * Handle channel unsubscription
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @param string|null $channel
      * @return void
      */
-    protected function handleUnsubscribe(ConnectionInterface $conn, ?string $channel): void
+    protected function handleUnsubscribe(TcpConnection $conn, ?string $channel): void
     {
         if (!$channel) {
             return;
@@ -233,10 +240,10 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Handle ping/pong for keepalive
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @return void
      */
-    protected function handlePing(ConnectionInterface $conn): void
+    protected function handlePing(TcpConnection $conn): void
     {
         $this->sendToClient($conn, [
             'event' => 'doppar:pong',
@@ -246,12 +253,12 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Handle client-triggered events
      *
-     * @param ConnectionInterface $from
+     * @param TcpConnection $from
      * @param string $channel
      * @param array $data
      * @return void
      */
-    protected function handleClientEvent(ConnectionInterface $from, string $channel, array $data): void
+    protected function handleClientEvent(TcpConnection $from, string $channel, array $data): void
     {
         // Client events are only allowed on private/presence channels
         if (!str_starts_with($channel, 'private-') && !str_starts_with($channel, 'presence-')) {
@@ -260,19 +267,19 @@ class WebSocketHandler implements MessageComponentInterface
         }
 
         // Broadcast to all channel subscribers except sender
-        $this->broadcastToChannel($channel, $data, $from->resourceId);
+        $this->broadcastToChannel($channel, $data, spl_object_id($from));
     }
 
     /**
      * Handle server-side broadcast
      *
-     * @param ConnectionInterface $from
+     * @param TcpConnection $from
      * @param string $event
      * @param string|null $channel
      * @param array $data
      * @return void
      */
-    protected function handleBroadcast(ConnectionInterface $from, string $event, ?string $channel, array $data): void
+    protected function handleBroadcast(TcpConnection $from, string $event, ?string $channel, array $data): void
     {
         if ($channel) {
             $this->broadcastToChannel($channel, [
@@ -288,15 +295,17 @@ class WebSocketHandler implements MessageComponentInterface
      *
      * @param string $channel
      * @param array $message
-     * @param int|null $exceptResourceId
+     * @param int|null $exceptConnectionId
      * @return void
      */
-    public function broadcastToChannel(string $channel, array $message, ?int $exceptResourceId = null): void
+    public function broadcastToChannel(string $channel, array $message, ?int $exceptConnectionId = null): void
     {
         $subscribers = $this->channels[$channel] ?? [];
 
         foreach ($subscribers as $client) {
-            if ($exceptResourceId && $client->resourceId === $exceptResourceId) {
+            $clientId = spl_object_id($client);
+
+            if ($exceptConnectionId && $clientId === $exceptConnectionId) {
                 continue;
             }
 
@@ -307,11 +316,11 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Send message to specific client
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @param array $message
      * @return void
      */
-    public function sendToClient(ConnectionInterface $conn, array $message): void
+    public function sendToClient(TcpConnection $conn, array $message): void
     {
         $conn->send(json_encode($message));
     }
@@ -319,11 +328,11 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Send error message to client
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @param string $message
      * @return void
      */
-    protected function sendError(ConnectionInterface $conn, string $message): void
+    protected function sendError(TcpConnection $conn, string $message): void
     {
         $this->sendToClient($conn, [
             'event' => 'doppar:error',
@@ -334,16 +343,16 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Remove connection from specific channel
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @param string $channel
      * @return void
      */
-    protected function removeFromChannel(ConnectionInterface $conn, string $channel): void
+    protected function removeFromChannel(TcpConnection $conn, string $channel): void
     {
         if (isset($this->channels[$channel])) {
             $this->channels[$channel] = array_filter(
                 $this->channels[$channel],
-                fn($c) => $c->resourceId !== $conn->resourceId
+                fn($c) => spl_object_id($c) !== spl_object_id($conn)
             );
 
             if (empty($this->channels[$channel])) {
@@ -360,12 +369,13 @@ class WebSocketHandler implements MessageComponentInterface
     /**
      * Remove connection from all channels
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @return void
      */
-    protected function removeFromAllChannels(ConnectionInterface $conn): void
+    protected function removeFromAllChannels(TcpConnection $conn): void
     {
-        $subscribedChannels = $this->clientMetadata[$conn->resourceId]['subscribed_channels'] ?? [];
+        $connectionId = spl_object_id($conn);
+        $subscribedChannels = $this->clientMetadata[$connectionId]['subscribed_channels'] ?? [];
 
         foreach ($subscribedChannels as $channel) {
             $this->removeFromChannel($conn, $channel);
@@ -407,10 +417,11 @@ class WebSocketHandler implements MessageComponentInterface
         $now = time();
 
         foreach ($this->clients as $client) {
-            $lastHeartbeat = $this->clientMetadata[$client->resourceId]['last_heartbeat'] ?? 0;
+            $clientId = spl_object_id($client);
+            $lastHeartbeat = $this->clientMetadata[$clientId]['last_heartbeat'] ?? 0;
 
             if ($now - $lastHeartbeat > $timeout) {
-                Log::info("Closing stale connection: {$client->resourceId}");
+                Log::info("Closing stale connection: {$clientId}");
                 $client->close();
             }
         }

@@ -2,8 +2,8 @@
 
 namespace Doppar\Airbend\Broadcasting;
 
-use React\EventLoop\LoopInterface;
 use Phaseolies\Support\Facades\Log;
+use Workerman\Timer;
 use Doppar\Airbend\Broadcasting\WebSocketHandler;
 use Doppar\Airbend\Broadcasting\Concerns\HandleRedisConnection;
 
@@ -17,13 +17,6 @@ class RedisSubscriber
      * @var mixed
      */
     protected $redis;
-
-    /**
-     * Event loop
-     *
-     * @var LoopInterface
-     */
-    protected LoopInterface $loop;
 
     /**
      * WebSocket handler
@@ -49,12 +42,10 @@ class RedisSubscriber
     /**
      * Create a new Redis subscriber
      *
-     * @param LoopInterface $loop
      * @param WebSocketHandler $handler
      */
-    public function __construct(LoopInterface $loop, WebSocketHandler $handler)
+    public function __construct(WebSocketHandler $handler)
     {
-        $this->loop = $loop;
         $this->handler = $handler;
         $this->channel = config('airbend.websocket.pubsub_channel', 'doppar-broadcast');
 
@@ -69,6 +60,10 @@ class RedisSubscriber
     protected function connect(): void
     {
         $this->handleRedisConnection();
+
+        // Once connected, subscribe to the pub/sub channel so that
+        // WebSocket clients receive broadcast events.
+        $this->subscribe();
     }
 
     /**
@@ -83,8 +78,8 @@ class RedisSubscriber
 
             $this->pubsub->subscribe($this->channel);
 
-            // The event loop to periodically process Redis messages
-            $this->loop->addPeriodicTimer(0.01, function () {
+            // Periodically process Redis messages using Workerman's Timer
+            Timer::add(0.01, function () {
                 if ($this->pubsub) {
                     try {
                         $message = $this->pubsub->current();
@@ -102,7 +97,7 @@ class RedisSubscriber
         } catch (\Exception $e) {
             Log::error("Failed to subscribe to Redis channel: " . $e->getMessage());
             // Attempt to reconnect after 5 seconds
-            $this->loop->addTimer(5, function () {
+            Timer::add(5, function () {
                 $this->reconnect();
             });
         }
@@ -123,7 +118,7 @@ class RedisSubscriber
         } catch (\Exception $e) {
             Log::error("Reconnection failed: " . $e->getMessage());
             // Schedule another reconnection attempt
-            $this->loop->addTimer(5, function () {
+            Timer::add(5, function () {
                 $this->reconnect();
             });
         }
@@ -179,9 +174,10 @@ class RedisSubscriber
     protected function getResourceIdBySocketId(string $socketId): ?int
     {
         // Search through client metadata to find matching socket ID
-        foreach ($this->handler->clientMetadata as $resourceId => $metadata) {
+        foreach ($this->handler->clientMetadata as $connectionId => $metadata) {
             if (($metadata['socket_id'] ?? null) === $socketId) {
-                return $resourceId;
+                // Connection IDs are the keys of clientMetadata (spl_object_id)
+                return $connectionId;
             }
         }
 

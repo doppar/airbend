@@ -2,14 +2,10 @@
 
 namespace Doppar\Airbend\Broadcasting;
 
-use React\Socket\SocketServer;
-use React\Socket\SecureServer;
-use React\EventLoop\Loop;
-use React\EventLoop\LoopInterface;
-use Ratchet\WebSocket\WsServer;
-use Ratchet\Server\IoServer;
-use Ratchet\Http\HttpServer;
 use Phaseolies\Support\Facades\Log;
+use Workerman\Worker;
+use Workerman\Connection\TcpConnection;
+use Workerman\Timer;
 use Doppar\Airbend\Broadcasting\RedisSubscriber;
 use Doppar\Airbend\Broadcasting\WebSocketHandler;
 
@@ -37,13 +33,6 @@ class WebSocketServer
     protected bool $ssl;
 
     /**
-     * The event loop instance
-     *
-     * @var \React\EventLoop\LoopInterface
-     */
-    protected LoopInterface $loop;
-
-    /**
      * The WebSocket handler
      *
      * @var WebSocketHandler
@@ -56,13 +45,6 @@ class WebSocketServer
      * @var RedisSubscriber|null
      */
     protected ?RedisSubscriber $redisSubscriber = null;
-
-    /**
-     * IoServer instance
-     *
-     * @var IoServer|null
-     */
-    protected ?IoServer $server = null;
 
     /**
      * Server start time
@@ -83,7 +65,6 @@ class WebSocketServer
         $this->host = $host;
         $this->port = $port;
         $this->ssl = $ssl;
-        $this->loop = Loop::get();
         $this->handler = new WebSocketHandler();
         $this->startTime = time();
     }
@@ -95,45 +76,56 @@ class WebSocketServer
      */
     public function run(): void
     {
-        try {
-            $wsServer = new WsServer($this->handler);
-            $httpServer = new HttpServer($wsServer);
+        // Workerman-based WebSocket server
+        $host = $this->host;
+        $port = $this->port;
 
-            $socket = new SocketServer("{$this->host}:{$this->port}", [], $this->loop);
-
-            // Enable SSL if configured
-            if ($this->ssl) {
-                $sslOptions = [
+        $context = [];
+        if ($this->ssl) {
+            $context = [
+                'ssl' => [
                     'local_cert' => config('airbend.websocket.ssl_cert'),
                     'local_pk' => config('airbend.websocket.ssl_key'),
                     'allow_self_signed' => config('airbend.websocket.allow_self_signed', false),
                     'verify_peer' => false,
-                ];
-
-                $socket = new SecureServer($socket, $this->loop, $sslOptions);
-                Log::info('SSL/TLS enabled for WebSocket server');
-            }
-
-            $this->server = new IoServer($httpServer, $socket, $this->loop);
-
-            // Initialize Redis subscriber for broadcasting
-            $this->initializeRedisSubscriber();
-
-            // Set up periodic tasks (heartbeat, cleanup, etc.)
-            $this->setupPeriodicTasks();
-
-            // Setup graceful shutdown
-            $this->setupShutdownHandler();
-
-            Log::info("WebSocket server running on ws://{$this->host}:{$this->port}");
-            Log::info("Waiting for connections...");
-
-            // Start the event loop
-            $this->loop->run();
-        } catch (\Exception $e) {
-            Log::error("Failed to start WebSocket server: " . $e->getMessage());
-            throw $e;
+                ],
+            ];
         }
+
+        $worker = new Worker("websocket://{$host}:{$port}", $context);
+
+        if ($this->ssl) {
+            $worker->transport = 'ssl';
+            Log::info('SSL/TLS enabled for WebSocket server');
+        }
+
+        $handler = $this->handler;
+
+        $worker->onConnect = function (TcpConnection $connection) use ($handler) {
+            $handler->onOpen($connection);
+        };
+
+        $worker->onMessage = function (TcpConnection $connection, $data) use ($handler) {
+            $handler->onMessage($connection, $data);
+        };
+
+        $worker->onClose = function (TcpConnection $connection) use ($handler) {
+            $handler->onClose($connection);
+        };
+
+        $self = $this;
+        $worker->onWorkerStart = function () use ($self, $handler) {
+            // Initialize Redis subscriber for broadcasting
+            $self->initializeRedisSubscriber();
+
+            // Set up periodic tasks (heartbeat, cleanup, stats)
+            $self->setupPeriodicTasks();
+        };
+
+        Log::info("WebSocket server running on ws://{$this->host}:{$this->port}");
+        Log::info('Waiting for connections...');
+
+        Worker::runAll();
     }
 
     /**
@@ -144,7 +136,7 @@ class WebSocketServer
     protected function initializeRedisSubscriber(): void
     {
         try {
-            $this->redisSubscriber = new RedisSubscriber($this->loop, $this->handler);
+            $this->redisSubscriber = new RedisSubscriber($this->handler);
             Log::info('Redis subscriber initialized successfully');
         } catch (\Exception $e) {
             Log::error('Failed to initialize Redis subscriber: ' . $e->getMessage());
@@ -161,26 +153,23 @@ class WebSocketServer
     {
         // Heartbeat every 30 seconds
         $heartbeatInterval = config('airbend.websocket.heartbeat_interval', 30);
-        $this->loop->addPeriodicTimer($heartbeatInterval, function () {
+        Timer::add($heartbeatInterval, function () {
             $this->handler->sendHeartbeat();
             Log::debug('Heartbeat sent to all connected clients');
         });
 
         // Clean up stale connections every 60 seconds
-        $this->loop->addPeriodicTimer(60, function () {
-            $cleaned = $this->handler->cleanupStaleConnections();
-            if ($cleaned > 0) {
-                Log::info("Cleaned up {$cleaned} stale connections");
-            }
+        Timer::add(60, function () {
+            $this->handler->cleanupStaleConnections();
         });
 
         // Log statistics every 5 minutes (300 seconds)
-        $this->loop->addPeriodicTimer(300, function () {
+        Timer::add(300, function () {
             $this->logStatistics();
         });
 
         // Memory usage monitoring every 60 seconds
-        $this->loop->addPeriodicTimer(60, function () {
+        Timer::add(60, function () {
             $memoryUsage = memory_get_usage(true) / 1024 / 1024;
             $memoryPeak = memory_get_peak_usage(true) / 1024 / 1024;
 
