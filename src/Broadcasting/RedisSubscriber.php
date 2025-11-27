@@ -156,7 +156,7 @@ class RedisSubscriber
             $this->handler->broadcastToChannel(
                 $channel,
                 $message,
-                $exceptSocketId ? $this->getResourceIdBySocketId($exceptSocketId) : null
+                $exceptSocketId ? $this->getConnectionIdBySocketId($exceptSocketId) : null
             );
 
             Log::debug("Broadcast sent to channel {$channel}: {$event}");
@@ -166,17 +166,16 @@ class RedisSubscriber
     }
 
     /**
-     * Get resource ID by socket ID
+     * Get connection ID by socket ID
      *
      * @param string $socketId
      * @return int|null
      */
-    protected function getResourceIdBySocketId(string $socketId): ?int
+    protected function getConnectionIdBySocketId(string $socketId): ?int
     {
         // Search through client metadata to find matching socket ID
         foreach ($this->handler->clientMetadata as $connectionId => $metadata) {
             if (($metadata['socket_id'] ?? null) === $socketId) {
-                // Connection IDs are the keys of clientMetadata (spl_object_id)
                 return $connectionId;
             }
         }

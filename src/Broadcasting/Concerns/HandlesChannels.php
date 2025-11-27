@@ -2,7 +2,7 @@
 
 namespace Doppar\Airbend\Broadcasting\Concerns;
 
-use Ratchet\ConnectionInterface;
+use Workerman\Connection\TcpConnection;
 
 trait HandlesChannels
 {
@@ -41,13 +41,13 @@ trait HandlesChannels
     /**
      * Check if connection is subscribed to channel
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @param string $channel
      * @return bool
      */
-    public function isSubscribed(ConnectionInterface $conn, string $channel): bool
+    public function isSubscribed(TcpConnection $conn, string $channel): bool
     {
-        $subscribedChannels = $this->clientMetadata[$conn->resourceId]['subscribed_channels'] ?? [];
+        $subscribedChannels = $this->clientMetadata[$conn->id]['subscribed_channels'] ?? [];
 
         return in_array($channel, $subscribedChannels);
     }
@@ -55,12 +55,12 @@ trait HandlesChannels
     /**
      * Get all channels a connection is subscribed to
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @return array
      */
-    public function getSubscribedChannels(ConnectionInterface $conn): array
+    public function getSubscribedChannels(TcpConnection $conn): array
     {
-        return $this->clientMetadata[$conn->resourceId]['subscribed_channels'] ?? [];
+        return $this->clientMetadata[$conn->id]['subscribed_channels'] ?? [];
     }
 
     /**
@@ -68,13 +68,13 @@ trait HandlesChannels
      *
      * @param array $channels
      * @param array $message
-     * @param int|null $exceptResourceId
+     * @param int|null $exceptConnectionId
      * @return void
      */
-    public function broadcastToChannels(array $channels, array $message, ?int $exceptResourceId = null): void
+    public function broadcastToChannels(array $channels, array $message, ?int $exceptConnectionId = null): void
     {
         foreach ($channels as $channel) {
-            $this->broadcastToChannel($channel, $message, $exceptResourceId);
+            $this->broadcastToChannel($channel, $message, $exceptConnectionId);
         }
     }
 

@@ -3,7 +3,6 @@
 namespace Doppar\Airbend\Broadcasting;
 
 use Workerman\Connection\TcpConnection;
-
 use Phaseolies\Support\Facades\Log;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesPresence;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesChannels;
@@ -24,7 +23,7 @@ class WebSocketHandler
 
     /**
      * Channel subscriptions
-     * Format: ['channel-name' => [ConnectionInterface, ...]]
+     * Format: ['channel-name' => [TcpConnection, ...]]
      *
      * @var array
      */
@@ -40,7 +39,7 @@ class WebSocketHandler
 
     /**
      * Private channel subscriptions with auth
-     * Format: ['private-channel' => [ConnectionInterface, ...]]
+     * Format: ['private-channel' => [TcpConnection, ...]]
      *
      * @var array
      */
@@ -73,7 +72,7 @@ class WebSocketHandler
         $this->clients->attach($conn);
 
         $socketId = $this->generateSocketId();
-        $connectionId = spl_object_id($conn);
+        $connectionId = $conn->id;
         $this->clientMetadata[$connectionId] = [
             'socket_id' => $socketId,
             'auth_data' => null,
@@ -115,7 +114,7 @@ class WebSocketHandler
             $eventData = $data['data'] ?? [];
 
             // Update last activity
-            $fromId = spl_object_id($from);
+            $fromId = $from->id;
             $this->clientMetadata[$fromId]['last_heartbeat'] = time();
 
             // Route the message based on event type
@@ -140,7 +139,7 @@ class WebSocketHandler
      */
     public function onClose(TcpConnection $conn): void
     {
-        $connectionId = spl_object_id($conn);
+        $connectionId = $conn->id;
 
         $this->removeFromAllChannels($conn);
         $this->clients->detach($conn);
@@ -154,14 +153,15 @@ class WebSocketHandler
      * Handle connection error
      *
      * @param TcpConnection $conn
-     * @param \Throwable $e
+     * @param int $code
+     * @param string $msg
      * @return void
      */
-    public function onError(TcpConnection $conn, \Throwable $e): void
+    public function onError(TcpConnection $conn, int $code, string $msg): void
     {
-        $connectionId = spl_object_id($conn);
+        $connectionId = $conn->id;
 
-        Log::error("WebSocket error on connection {$connectionId}: " . $e->getMessage());
+        Log::error("WebSocket error on connection {$connectionId}: {$code} - {$msg}");
 
         $conn->close();
     }
@@ -205,7 +205,7 @@ class WebSocketHandler
         }
 
         $this->channels[$channel][] = $conn;
-        $connectionId = spl_object_id($conn);
+        $connectionId = $conn->id;
         $this->clientMetadata[$connectionId]['subscribed_channels'][] = $channel;
 
         $this->sendToClient($conn, [
@@ -267,7 +267,7 @@ class WebSocketHandler
         }
 
         // Broadcast to all channel subscribers except sender
-        $this->broadcastToChannel($channel, $data, spl_object_id($from));
+        $this->broadcastToChannel($channel, $data, $from->id);
     }
 
     /**
@@ -303,7 +303,7 @@ class WebSocketHandler
         $subscribers = $this->channels[$channel] ?? [];
 
         foreach ($subscribers as $client) {
-            $clientId = spl_object_id($client);
+            $clientId = $client->id;
 
             if ($exceptConnectionId && $clientId === $exceptConnectionId) {
                 continue;
@@ -352,7 +352,7 @@ class WebSocketHandler
         if (isset($this->channels[$channel])) {
             $this->channels[$channel] = array_filter(
                 $this->channels[$channel],
-                fn($c) => spl_object_id($c) !== spl_object_id($conn)
+                fn($c) => $c->id !== $conn->id
             );
 
             if (empty($this->channels[$channel])) {
@@ -374,7 +374,7 @@ class WebSocketHandler
      */
     protected function removeFromAllChannels(TcpConnection $conn): void
     {
-        $connectionId = spl_object_id($conn);
+        $connectionId = $conn->id;
         $subscribedChannels = $this->clientMetadata[$connectionId]['subscribed_channels'] ?? [];
 
         foreach ($subscribedChannels as $channel) {
@@ -417,7 +417,7 @@ class WebSocketHandler
         $now = time();
 
         foreach ($this->clients as $client) {
-            $clientId = spl_object_id($client);
+            $clientId = $client->id;
             $lastHeartbeat = $this->clientMetadata[$clientId]['last_heartbeat'] ?? 0;
 
             if ($now - $lastHeartbeat > $timeout) {
