@@ -2,7 +2,7 @@
 
 namespace Doppar\Airbend\Broadcasting\Concerns;
 
-use Ratchet\ConnectionInterface;
+use Workerman\Connection\TcpConnection;
 use Phaseolies\Support\Facades\Log;
 
 trait HandlesPresence
@@ -10,19 +10,19 @@ trait HandlesPresence
     /**
      * Subscribe to a presence channel
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @param string $channel
      * @param array $authData
      * @return void
      */
-    protected function subscribeToPresenceChannel(ConnectionInterface $conn, string $channel, array $authData): void
+    protected function subscribeToPresenceChannel(TcpConnection $conn, string $channel, array $authData): void
     {
         $userData = $this->authenticatePresenceChannel($conn, $channel, $authData);
 
         if (!$userData) {
             $this->sendError($conn, 'Authentication failed for presence channel');
             Log::warning("Presence channel auth failed for {$channel}", [
-                'resource_id' => $conn->resourceId
+                'connection_id' => $conn->id
             ]);
             return;
         }
@@ -45,16 +45,16 @@ trait HandlesPresence
             ];
         }
 
-        $this->presenceChannels[$channel][$userId]['connections'][] = $conn->resourceId;
+        $this->presenceChannels[$channel][$userId]['connections'][] = $conn->id;
 
         // Add to regular channel subscriptions
         if (!isset($this->channels[$channel])) {
             $this->channels[$channel] = [];
         }
         $this->channels[$channel][] = $conn;
-        $this->clientMetadata[$conn->resourceId]['subscribed_channels'][] = $channel;
-        $this->clientMetadata[$conn->resourceId]['presence_user_id'] = $userId;
-        $this->clientMetadata[$conn->resourceId]['presence_channel'] = $channel;
+        $this->clientMetadata[$conn->id]['subscribed_channels'][] = $channel;
+        $this->clientMetadata[$conn->id]['presence_user_id'] = $userId;
+        $this->clientMetadata[$conn->id]['presence_channel'] = $channel;
 
         // Send subscription success with current members
         $presenceData = [
@@ -82,19 +82,19 @@ trait HandlesPresence
                 'event' => 'doppar:member_added',
                 'channel' => $channel,
                 'data' => json_encode($memberData),
-            ], $conn->resourceId);
+            ], $conn->id);
 
             Log::info("New member joined presence channel", [
                 'channel' => $channel,
                 'user_id' => $userId,
-                'resource_id' => $conn->resourceId,
+                'connection_id' => $conn->id,
                 'total_members' => count($this->presenceChannels[$channel])
             ]);
         } else {
             Log::info("Existing member reconnected to presence channel", [
                 'channel' => $channel,
                 'user_id' => $userId,
-                'resource_id' => $conn->resourceId,
+                'connection_id' => $conn->id,
                 'connections' => count($this->presenceChannels[$channel][$userId]['connections'])
             ]);
         }
@@ -103,17 +103,17 @@ trait HandlesPresence
     /**
      * Remove connection from presence channel
      *
-     * @param ConnectionInterface $conn
+     * @param TcpConnection $conn
      * @param string $channel
      * @return void
      */
-    protected function removeFromPresenceChannel(ConnectionInterface $conn, string $channel): void
+    protected function removeFromPresenceChannel(TcpConnection $conn, string $channel): void
     {
         if (!isset($this->presenceChannels[$channel])) {
             return;
         }
 
-        $userId = $this->clientMetadata[$conn->resourceId]['presence_user_id'] ?? null;
+        $userId = $this->clientMetadata[$conn->id]['presence_user_id'] ?? null;
 
         if (!$userId || !isset($this->presenceChannels[$channel][$userId])) {
             return;
@@ -121,7 +121,7 @@ trait HandlesPresence
 
         // Remove this connection from user's connection list
         $connections = &$this->presenceChannels[$channel][$userId]['connections'];
-        $connections = array_filter($connections, fn($id) => $id !== $conn->resourceId);
+        $connections = array_filter($connections, fn($id) => $id !== $conn->id);
 
         // If user has no more connections, remove them from presence
         if (empty($connections)) {

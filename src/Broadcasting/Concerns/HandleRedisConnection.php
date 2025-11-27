@@ -103,7 +103,9 @@ trait HandleRedisConnection
 
         $options = [
             'prefix' => $redisConfig['prefix'] ?? 'airbend:',
-            'read_write_timeout' => -1, // Important for pub/sub to not timeout
+            'read_write_timeout' => 0, // Infinite timeout for pub/sub
+            'persistent' => false, // Don't use persistent for pub/sub
+            'exceptions' => true, // Enable exceptions
         ];
 
         if (!empty($params['database'])) {

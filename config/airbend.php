@@ -112,26 +112,5 @@ return [
         'enabled' => true,
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Redis Connection Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Configuration for Redis connections used by the broadcast system.
-    |
-    */
-
-    'connections' => [
-        'redis' => [
-            'connection' => env('REDIS_URL', 'redis://127.0.0.1:6379'),
-            'prefix' => env('REDIS_PREFIX', 'airbend:'),
-            'options' => [
-                'parameters' => [
-                    'password' => env('REDIS_PASSWORD', null),
-                    'database' => env('REDIS_DB', 1),
-                ],
-            ],
-        ],
-    ],
 
 ];
