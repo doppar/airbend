@@ -1,3 +1,13 @@
+## Dependency 
+```bash
+php -m | grep -E 'pcntl|posix|event'
+```
+
+Check if the following extensions are enabled:
+- pcntl
+- posix
+- event [Optional for better performance]
+
 ## Step 1
 ```php
 <?php

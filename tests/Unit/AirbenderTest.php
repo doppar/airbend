@@ -6,7 +6,7 @@ namespace Doppar\Bloom\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
-class BitsTest extends TestCase
+class AirbenderTest extends TestCase
 {
     public function testTestReturnsTrueWhenAllBitsAreSet(): void
     {
