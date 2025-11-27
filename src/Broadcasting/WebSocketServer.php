@@ -93,6 +93,8 @@ class WebSocketServer
         }
 
         $worker = new Worker("websocket://{$host}:{$port}", $context);
+        $worker->name = 'WebSocket Server';
+        $worker->count = 1;
 
         if ($this->ssl) {
             $worker->transport = 'ssl';
@@ -113,18 +115,32 @@ class WebSocketServer
             $handler->onClose($connection);
         };
 
-        $self = $this;
-        $worker->onWorkerStart = function () use ($self, $handler) {
-            // Initialize Redis subscriber for broadcasting
-            $self->initializeRedisSubscriber();
+        $worker->onError = function (TcpConnection $connection, $code, $msg) use ($handler) {
+            $handler->onError($connection, $code, $msg);
+        };
 
+        $self = $this;
+        $worker->onWorkerStart = function () use ($self) {
+            // Initialize Redis subscriber within this worker
+            if ($self->redisSubscriber) {
+                try {
+                    $self->redisSubscriber->initialize();
+                } catch (\Exception $e) {
+                    Log::error('Failed to initialize Redis in worker: ' . $e->getMessage());
+                }
+            }
+            
             // Set up periodic tasks (heartbeat, cleanup, stats)
             $self->setupPeriodicTasks();
         };
 
-        Log::info("WebSocket server running on ws://{$this->host}:{$this->port}");
+        // Create Redis subscriber instance BEFORE running workers
+        $this->initializeRedisSubscriber();
+
+        Log::info("WebSocket server starting on ws://{$this->host}:{$this->port}");
         Log::info('Waiting for connections...');
 
+        // This blocks and runs all workers (WebSocket + Redis subscriber)
         Worker::runAll();
     }
 
@@ -137,9 +153,9 @@ class WebSocketServer
     {
         try {
             $this->redisSubscriber = new RedisSubscriber($this->handler);
-            Log::info('Redis subscriber initialized successfully');
+            Log::info('Redis subscriber instance created');
         } catch (\Exception $e) {
-            Log::error('Failed to initialize Redis subscriber: ' . $e->getMessage());
+            Log::error('Failed to create Redis subscriber: ' . $e->getMessage());
             Log::warning('Server will continue without Redis broadcasting');
         }
     }

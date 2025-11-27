@@ -33,11 +33,18 @@ class RedisSubscriber
     protected string $channel;
 
     /**
-     * Redis pub/sub loop instance
+     * Last processed message ID
      *
-     * @var mixed
+     * @var string
      */
-    protected $pubsub;
+    protected string $lastId = '0-0';
+
+    /**
+     * Timer ID
+     *
+     * @var int|null
+     */
+    protected ?int $timerId = null;
 
     /**
      * Create a new Redis subscriber
@@ -48,79 +55,36 @@ class RedisSubscriber
     {
         $this->handler = $handler;
         $this->channel = config('airbend.websocket.pubsub_channel', 'doppar-broadcast');
-
-        $this->connect();
     }
 
     /**
-     * Connect to Redis and subscribe
+     * Initialize Redis subscription using polling (non-blocking)
      *
      * @return void
      */
-    protected function connect(): void
-    {
-        $this->handleRedisConnection();
-
-        // Once connected, subscribe to the pub/sub channel so that
-        // WebSocket clients receive broadcast events.
-        $this->subscribe();
-    }
-
-    /**
-     * Subscribe to the broadcast channel
-     *
-     * @return void
-     */
-    protected function subscribe(): void
+    public function initialize(): void
     {
         try {
-            $this->pubsub = $this->redis->pubSubLoop();
-
-            $this->pubsub->subscribe($this->channel);
-
-            // Periodically process Redis messages using Workerman's Timer
-            Timer::add(0.01, function () {
-                if ($this->pubsub) {
-                    try {
-                        $message = $this->pubsub->current();
-                        if ($message && $message->kind === 'message') {
-                            $this->handleMessage($message->payload);
-                        }
-                        $this->pubsub->next();
-                    } catch (\Exception $e) {
-                        Log::error("Error processing Redis message: " . $e->getMessage());
+            $this->handleRedisConnection();
+            
+            // Use Redis Streams or polling instead of blocking pub/sub
+            // Poll every 100ms for new messages using a list
+            $this->timerId = Timer::add(0.1, function () {
+                try {
+                    // Use RPOP to get messages from a list (non-blocking)
+                    $message = $this->redis->rpop($this->channel);
+                    
+                    if ($message) {
+                        $this->handleMessage($message);
                     }
+                } catch (\Exception $e) {
+                    Log::warning("Redis polling error: " . $e->getMessage());
                 }
             });
 
-            Log::info("Subscribed to Redis pub/sub channel: {$this->channel}");
+            Log::info("Redis subscriber initialized (polling mode) on channel: {$this->channel}");
         } catch (\Exception $e) {
-            Log::error("Failed to subscribe to Redis channel: " . $e->getMessage());
-            // Attempt to reconnect after 5 seconds
-            Timer::add(5, function () {
-                $this->reconnect();
-            });
-        }
-    }
-
-    /**
-     * Reconnect to Redis
-     *
-     * @return void
-     */
-    protected function reconnect(): void
-    {
-        Log::info('Attempting to reconnect to Redis...');
-
-        try {
-            $this->disconnect();
-            $this->connect();
-        } catch (\Exception $e) {
-            Log::error("Reconnection failed: " . $e->getMessage());
-            // Schedule another reconnection attempt
-            Timer::add(5, function () {
-                $this->reconnect();
-            });
+            Log::error("Failed to initialize Redis subscriber: " . $e->getMessage());
         }
     }
 
@@ -136,7 +100,7 @@ class RedisSubscriber
             $data = json_decode($payload, true);
 
             if (!isset($data['event'], $data['channel'])) {
-                Log::warning('Invalid broadcast message format', ['payload' => $payload]);
+                Log::warning('Invalid broadcast message format', ['payload' => substr($payload, 0, 100)]);
                 return;
             }
 
@@ -173,7 +137,6 @@ class RedisSubscriber
      */
     protected function getConnectionIdBySocketId(string $socketId): ?int
     {
-        // Search through client metadata to find matching socket ID
         foreach ($this->handler->clientMetadata as $connectionId => $metadata) {
             if (($metadata['socket_id'] ?? null) === $socketId) {
                 return $connectionId;
@@ -190,13 +153,9 @@ class RedisSubscriber
      */
     public function disconnect(): void
     {
-        if ($this->pubsub) {
-            try {
-                $this->pubsub->unsubscribe();
-                $this->pubsub = null;
-            } catch (\Exception $e) {
-                Log::error("Error unsubscribing from Redis: " . $e->getMessage());
-            }
+        if ($this->timerId) {
+            Timer::del($this->timerId);
+            $this->timerId = null;
         }
 
         if (isset($this->redis)) {

@@ -56,7 +56,8 @@ class WebSocketDriver implements BroadcastDriver
         ];
 
         try {
-            $this->redis->publish($this->pubsubChannel, json_encode($payload));
+            // Use LPUSH instead of PUBLISH for compatibility with polling-based subscriber
+            $this->redis->lpush($this->pubsubChannel, json_encode($payload));
         } catch (\Exception $e) {
             Log::error("WebSocket broadcast failed: {$e->getMessage()}");
         }
