@@ -81,7 +81,6 @@ class BroadcastAuthController extends Controller
      */
     protected function isValidSocketId(string $socketId): bool
     {
-        // Socket ID should be in format: xxx.yyyy
         return (bool) preg_match('/^[\w\-\.]+$/', $socketId);
     }
 
@@ -93,7 +92,6 @@ class BroadcastAuthController extends Controller
      */
     protected function isValidChannelName(string $channel): bool
     {
-        // Channel name should only contain alphanumeric, dash, underscore, and dot
         return (bool) preg_match('/^[a-zA-Z0-9\-\_\.]+$/', $channel);
     }
 
@@ -108,33 +106,22 @@ class BroadcastAuthController extends Controller
     {
         $user = $request->user();
 
-        // Public channels are always accessible
         if (!str_starts_with($channel, 'private-') && !str_starts_with($channel, 'presence-')) {
             return true;
         }
 
-        // Ensure user is authenticated for private/presence channels
         if (!$user) {
             return false;
         }
 
-        // Private user channel: private-user.{id}
         if (preg_match('/^private-user\.(\d+)$/', $channel, $matches)) {
             return $user->id == $matches[1];
         }
 
-        // Presence channel: presence-room.{id}
         if (preg_match('/^presence-room\.(\d+)$/', $channel, $matches)) {
-            return [
-                'user_id' => $user->id,
-                'user_info' => [
-                    'name' => $user->name,
-                    'email' => $user->email
-                ],
-            ];
+            return $this->getUserData($request);
         }
 
-        // Team channels: private-team.{id}
         if (preg_match('/^private-team\.(\d+)$/', $channel, $matches)) {
             $teamId = $matches[1];
             return $user->teams()->where('id', $teamId)->exists();
