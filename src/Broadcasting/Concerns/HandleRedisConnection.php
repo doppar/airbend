@@ -36,7 +36,7 @@ trait HandleRedisConnection
      */
     protected function getConnectionConfig()
     {
-        $redisConfig = config('airbend.connections.redis');
+        $redisConfig = config('airbend.connections.websocket.redis');
         $connection = $redisConfig['connection'] ?? 'tcp://127.0.0.1:6379';
 
         if (is_array($connection) && isset($connection['scheme'])) {

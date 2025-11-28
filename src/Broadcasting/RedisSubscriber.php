@@ -4,9 +4,12 @@ namespace Doppar\Airbend\Broadcasting;
 
 use Workerman\Timer;
 use Phaseolies\Support\Facades\Log;
+use Doppar\Airbend\Broadcasting\Concerns\HandleRedisConnection;
 
 class RedisSubscriber
 {
+    use HandleRedisConnection;
+
     /**
      * Redis connection
      *
@@ -61,12 +64,7 @@ class RedisSubscriber
     public function initialize(): void
     {
         try {
-            $this->redis = new \Predis\Client([
-                'scheme' => 'tcp',
-                'host' => '127.0.0.1',
-                'port' => 6379,
-            ]);
-
+            $this->handleRedisConnection();
             $this->redis->ping();
 
             Log::info("Redis subscriber connected successfully");
@@ -203,11 +201,7 @@ class RedisSubscriber
         try {
             Log::warning("Attempting to reconnect to Redis...");
 
-            $this->redis = new \Predis\Client([
-                'scheme' => 'tcp',
-                'host' => '127.0.0.1',
-                'port' => 6379,
-            ]);
+            $this->handleRedisConnection();
 
             $this->redis->ping();
 
