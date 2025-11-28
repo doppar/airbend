@@ -5,9 +5,12 @@ namespace Doppar\Airbend\Broadcasting\Drivers;
 use Phaseolies\Support\Facades\Log;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
+use Doppar\Airbend\Broadcasting\Concerns\HandleRedisConnection;
 
 class WebSocketDriver implements BroadcastDriver
 {
+    use HandleRedisConnection;
+
     /**
      * Redis connection
      *
@@ -27,16 +30,12 @@ class WebSocketDriver implements BroadcastDriver
      */
     public function __construct()
     {
-        $this->redis = new \Predis\Client([
-            'scheme' => 'tcp',
-            'host' => '127.0.0.1',
-            'port' => 6379,
-        ]);
+        $this->handleRedisConnection();
 
-        $this->pubsubChannel = config('airbend.websocket.pubsub_channel', 'doppar-broadcast');
+        $this->pubsubChannel = config('airbend.websocket.channel', 'doppar-broadcast');
 
         Log::debug('WebSocketDriver initialized', [
-            'pubsub_channel' => $this->pubsubChannel,
+            'channel' => $this->pubsubChannel,
             'note' => 'Using raw Redis connection without prefix',
         ]);
     }

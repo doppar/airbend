@@ -11,7 +11,7 @@ return [
     | framework when an event needs to be broadcast. You may set this to
     | any of the connections defined in the "connections" array below.
     |
-    | Supported: "websocket", "redis", "null"
+    | Supported: "websocket", "null"
     |
     */
 
@@ -39,16 +39,14 @@ return [
             'ssl_cert' => env('WEBSOCKET_SSL_CERT'),
             'ssl_key' => env('WEBSOCKET_SSL_KEY'),
             'allow_self_signed' => env('WEBSOCKET_ALLOW_SELF_SIGNED', false),
-        ],
-
-        'redis' => [
-            'driver' => 'redis',
-            'connection' => env('REDIS_URL', 'redis://127.0.0.1:6379'),
-            'prefix' => env('REDIS_PREFIX', 'airbend:'),
-            'options' => [
-                'parameters' => [
-                    'password' => env('REDIS_PASSWORD', null),
-                    'database' => env('REDIS_DB', 1),
+            'redis' => [
+                'driver' => 'redis',
+                'connection' => env('REDIS_URL', 'redis://127.0.0.1:6379'),
+                'options' => [
+                    'parameters' => [
+                        'password' => env('REDIS_PASSWORD', null),
+                        'database' => env('REDIS_DB', 1),
+                    ],
                 ],
             ],
         ],
@@ -75,24 +73,14 @@ return [
         'ssl_cert' => env('WEBSOCKET_SSL_CERT'),
         'ssl_key' => env('WEBSOCKET_SSL_KEY'),
         'allow_self_signed' => env('WEBSOCKET_ALLOW_SELF_SIGNED', false),
-
-        // Application credentials for authentication
         'app_key' => env('WEBSOCKET_APP_KEY', 'doppar-app-key'),
         'app_secret' => env('WEBSOCKET_APP_SECRET', 'doppar-app-secret'),
-
-        // Redis pub/sub channel for broadcasting
-        'pubsub_channel' => env('WEBSOCKET_PUBSUB_CHANNEL', 'doppar-broadcast'),
-
-        // Connection limits
+        'channel' => env('WEBSOCKET_CHANNEL', 'doppar-broadcast'),
         'max_connections' => env('WEBSOCKET_MAX_CONNECTIONS', 1000),
         'connection_timeout' => env('WEBSOCKET_CONNECTION_TIMEOUT', 180),
-
-        // Heartbeat settings
         'heartbeat_interval' => env('WEBSOCKET_HEARTBEAT_INTERVAL', 30),
-
-        // Allowed origins for CORS
         'allowed_origins' => [
-            '*', // Allow all origins (restrict in production)
+            '*',
         ],
     ],
 
@@ -111,6 +99,5 @@ return [
         'middleware' => ['auth'],
         'enabled' => true,
     ],
-
 
 ];

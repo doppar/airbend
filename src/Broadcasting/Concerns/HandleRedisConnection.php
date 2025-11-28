@@ -36,7 +36,7 @@ trait HandleRedisConnection
      */
     protected function getConnectionConfig()
     {
-        $redisConfig = config('airbend.connections.redis');
+        $redisConfig = config('airbend.connections.websocket.redis');
         $connection = $redisConfig['connection'] ?? 'tcp://127.0.0.1:6379';
 
         if (is_array($connection) && isset($connection['scheme'])) {
@@ -103,9 +103,9 @@ trait HandleRedisConnection
 
         $options = [
             'prefix' => $redisConfig['prefix'] ?? 'airbend:',
-            'read_write_timeout' => 0, // Infinite timeout for pub/sub
-            'persistent' => false, // Don't use persistent for pub/sub
-            'exceptions' => true, // Enable exceptions
+            'read_write_timeout' => 0,
+            'persistent' => false,
+            'exceptions' => true,
         ];
 
         if (!empty($params['database'])) {
