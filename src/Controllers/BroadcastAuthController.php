@@ -24,7 +24,6 @@ class BroadcastAuthController extends Controller
         $socketId = $request->input('socket_id');
         $channel = $request->input('channel_name');
 
-        // Validate required parameters
         if (!$socketId || !$channel) {
             return response()->json([
                 'error' => 'Missing required parameters',
@@ -32,14 +31,12 @@ class BroadcastAuthController extends Controller
             ], 400);
         }
 
-        // Validate socket ID format
         if (!$this->isValidSocketId($socketId)) {
             return response()->json([
                 'error' => 'Invalid socket ID format'
             ], 400);
         }
 
-        // Validate channel name format
         if (!$this->isValidChannelName($channel)) {
             return response()->json([
                 'error' => 'Invalid channel name format'
@@ -47,10 +44,8 @@ class BroadcastAuthController extends Controller
         }
 
         try {
-            // Use Channel helper for authorization
-            $authResult = Channel::authorizeChannel($request, $channel);
+            $authResult = $this->authorizeChannel($request, $channel);
 
-            // If authorization failed
             if ($authResult === false) {
                 return response()->json([
                     'error' => 'Unauthorized',
@@ -58,11 +53,8 @@ class BroadcastAuthController extends Controller
                 ], 403);
             }
 
-            // For private channels, authResult is true
-            // For presence channels, authResult is an array with user data
             $userData = is_array($authResult) ? $authResult : null;
 
-            // Check if this is actually a presence channel but no user data was provided
             if (str_starts_with($channel, 'presence-') && !is_array($authResult)) {
                 return response()->json([
                     'error' => 'Invalid presence channel configuration',
@@ -70,18 +62,10 @@ class BroadcastAuthController extends Controller
                 ], 500);
             }
 
-            // Generate authentication signature
             $auth = Broadcast::driver()->authenticate($socketId, $channel, $userData);
 
             return response()->json($auth);
         } catch (\Exception $e) {
-            Log::error('Broadcast authentication error', [
-                'channel' => $channel,
-                'socket_id' => $socketId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
             return response()->json([
                 'error' => 'Authentication failed',
                 'message' => 'An error occurred during authentication'
@@ -114,9 +98,7 @@ class BroadcastAuthController extends Controller
     }
 
     /**
-     * Legacy authorization method (kept for backward compatibility)
-     * You can also define authorization logic directly here if you prefer
-     * not to use the routes/channels.php file
+     * Legacy authorization method
      *
      * @param Request $request
      * @param string $channel
@@ -143,14 +125,11 @@ class BroadcastAuthController extends Controller
 
         // Presence channel: presence-room.{id}
         if (preg_match('/^presence-room\.(\d+)$/', $channel, $matches)) {
-            // Check if user has access to this room
-            // Return user data for presence channel
             return [
                 'user_id' => $user->id,
                 'user_info' => [
                     'name' => $user->name,
-                    'email' => $user->email,
-                    'avatar' => $user->avatar ?? null,
+                    'email' => $user->email
                 ],
             ];
         }
@@ -158,16 +137,9 @@ class BroadcastAuthController extends Controller
         // Team channels: private-team.{id}
         if (preg_match('/^private-team\.(\d+)$/', $channel, $matches)) {
             $teamId = $matches[1];
-            // Check if user belongs to team
             return $user->teams()->where('id', $teamId)->exists();
         }
 
-        // Admin channels
-        if (str_starts_with($channel, 'private-admin')) {
-            return $user->isAdmin();
-        }
-
-        // Default: deny access
         return false;
     }
 
@@ -185,9 +157,7 @@ class BroadcastAuthController extends Controller
             'user_id' => $user->id,
             'user_info' => [
                 'name' => $user->name,
-                'email' => $user->email,
-                'avatar' => $user->avatar ?? null,
-                'status' => $user->status ?? 'online',
+                'email' => $user->email
             ],
         ];
     }
