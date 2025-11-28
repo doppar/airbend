@@ -33,7 +33,7 @@ class RedisSubscriber
      *
      * @var float
      */
-    protected float $pollInterval = 0.1; // 100ms
+    protected float $pollInterval = 0.1;
 
     /**
      * Timer ID for polling
@@ -50,7 +50,7 @@ class RedisSubscriber
     public function __construct(WebSocketHandler $handler)
     {
         $this->handler = $handler;
-        $this->pubsubChannel = config('airbend.websocket.pubsub_channel', 'doppar-broadcast');
+        $this->pubsubChannel = config('airbend.websocket.channel', 'doppar-broadcast');
     }
 
     /**
@@ -65,7 +65,7 @@ class RedisSubscriber
                 'scheme' => 'tcp',
                 'host' => '127.0.0.1',
                 'port' => 6379,
-            ]); // No prefix!
+            ]);
 
             $this->redis->ping();
 
@@ -103,7 +103,6 @@ class RedisSubscriber
     protected function pollMessages(): void
     {
         try {
-            // RPOP from the raw key (no prefix)
             $message = $this->redis->rpop($this->pubsubChannel);
 
             if ($message) {
@@ -128,7 +127,7 @@ class RedisSubscriber
     protected function processMessage(string $message): void
     {
         try {
-            Log::debug("🔍 Processing message", ['raw' => substr($message, 0, 200)]);
+            Log::debug("Processing message", ['raw' => substr($message, 0, 200)]);
 
             $data = json_decode($message, true);
 
@@ -164,13 +163,13 @@ class RedisSubscriber
                 'data' => is_string($eventData) ? $eventData : json_encode($eventData),
             ], $exceptConnectionId);
 
-            Log::debug("✅ Broadcast message sent", [
+            Log::debug("Broadcast message sent", [
                 'event' => $event,
                 'channel' => $channel,
                 'except_socket' => $exceptSocketId,
             ]);
         } catch (\Exception $e) {
-            Log::error("❌ Error processing broadcast message: " . $e->getMessage(), [
+            Log::error("Error processing broadcast message: " . $e->getMessage(), [
                 'message' => substr($message, 0, 500),
                 'trace' => $e->getTraceAsString()
             ]);
