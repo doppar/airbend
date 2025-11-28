@@ -8,6 +8,7 @@ use Doppar\Airbend\Broadcasting\Drivers\RedisDriver;
 use Doppar\Airbend\Broadcasting\Drivers\NullDriver;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
+use Phaseolies\Support\Facades\Log;
 
 class BroadcastManager
 {
@@ -58,6 +59,12 @@ class BroadcastManager
      */
     public function channel(string|array $channels, BroadcastEvent $event): void
     {
+        // Get channels from event if not explicitly provided
+        if (empty($channels)) {
+            $channels = $event->broadcastOn();
+        }
+
+        // Normalize to array
         $channels = is_array($channels) ? $channels : [$channels];
 
         $driver = $this->driver();
@@ -77,8 +84,21 @@ class BroadcastManager
             $this->exceptSocketId = $this->getCurrentSocketId();
         }
 
-        // Broadcast to each channel
+        Log::debug('Broadcasting to channels', [
+            'channels' => $channels,
+            'event' => get_class($event),
+            'event_name' => $event->broadcastAs(),
+            'to_others' => $this->toOthers,
+            'except_socket' => $this->exceptSocketId,
+        ]);
+
+        // Broadcast to each channel separately
         foreach ($channels as $channel) {
+            Log::debug('Broadcasting to channel', [
+                'channel' => $channel,
+                'event' => $event->broadcastAs(),
+            ]);
+
             $driver->broadcast($channel, $event, [
                 'except' => $this->exceptSocketId,
                 'to_others' => $this->toOthers,
@@ -97,8 +117,6 @@ class BroadcastManager
     public function toOthers(): self
     {
         $this->toOthers = true;
-
-        // Try to get socket ID from request
         $this->exceptSocketId = $this->getCurrentSocketId();
 
         return $this;
@@ -113,7 +131,6 @@ class BroadcastManager
     public function except(string $socketId): self
     {
         $this->exceptSocketId = $socketId;
-
         return $this;
     }
 
@@ -147,7 +164,6 @@ class BroadcastManager
     protected function reset(): void
     {
         $this->toOthers = false;
-
         $this->exceptSocketId = null;
     }
 

@@ -5,16 +5,13 @@ namespace Doppar\Airbend\Broadcasting\Drivers;
 use Phaseolies\Support\Facades\Log;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
-use Doppar\Airbend\Broadcasting\Concerns\HandleRedisConnection;
 
 class WebSocketDriver implements BroadcastDriver
 {
-    use HandleRedisConnection;
-
     /**
      * Redis connection
      *
-     * @var mixed
+     * @var \Predis\Client
      */
     protected $redis;
 
@@ -30,8 +27,18 @@ class WebSocketDriver implements BroadcastDriver
      */
     public function __construct()
     {
-        $this->redis = new \Predis\Client($this->getConnectionConfig());
+        $this->redis = new \Predis\Client([
+            'scheme' => 'tcp',
+            'host' => '127.0.0.1',
+            'port' => 6379,
+        ]);
+
         $this->pubsubChannel = config('airbend.websocket.pubsub_channel', 'doppar-broadcast');
+
+        Log::debug('WebSocketDriver initialized', [
+            'pubsub_channel' => $this->pubsubChannel,
+            'note' => 'Using raw Redis connection without prefix',
+        ]);
     }
 
     /**
@@ -45,21 +52,42 @@ class WebSocketDriver implements BroadcastDriver
     public function broadcast(string $channel, BroadcastEvent $event, array $options = []): void
     {
         if (!$event->shouldBroadcast()) {
+            Log::debug('Event should not broadcast, skipping', [
+                'event' => get_class($event),
+                'channel' => $channel,
+            ]);
             return;
         }
 
+        // Separate channel and event name
+        $eventName = $event->broadcastAs();
+        $eventData = $event->broadcastWith();
+
         $payload = [
-            'event' => $event->broadcastAs(),
+            'event' => $eventName,
             'channel' => $channel,
-            'data' => $event->broadcastWith(),
+            'data' => $eventData,
             'socket_id' => $options['except'] ?? null,
         ];
 
         try {
-            // Use LPUSH instead of PUBLISH for compatibility with polling-based subscriber
-            $this->redis->lpush($this->pubsubChannel, json_encode($payload));
+            // Push to Redis queue
+            $result = $this->redis->lpush($this->pubsubChannel, json_encode($payload));
+
+            Log::debug('Event broadcast to Redis', [
+                'channel' => $channel,
+                'event' => $eventName,
+                'data_keys' => array_keys($eventData),
+                'socket_id' => $options['except'] ?? 'none',
+                'redis_key' => $this->pubsubChannel,
+                'queue_length' => $result,
+            ]);
         } catch (\Exception $e) {
-            Log::error("WebSocket broadcast failed: {$e->getMessage()}");
+            Log::error("WebSocket broadcast failed: {$e->getMessage()}", [
+                'channel' => $channel,
+                'event' => $eventName,
+                'trace' => $e->getTraceAsString(),
+            ]);
         }
     }
 
