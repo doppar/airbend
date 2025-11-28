@@ -44,11 +44,9 @@ class WebSocketStartCommand extends Command
         $this->newLine();
 
         try {
-            // Set proper argv for Workerman to parse
-            // Use unique name to avoid conflicts with existing pool server
             global $argv;
             $argv = [
-                'websocket-server',  // Unique name, different from 'pool'
+                'websocket-server',
                 'start',
             ];
             $_SERVER['argv'] = $argv;
@@ -61,7 +59,6 @@ class WebSocketStartCommand extends Command
             $this->line("Press Ctrl+C to stop the server");
             $this->newLine();
 
-            // Start the server loop - this blocks until server is stopped
             $server->run();
 
             return 0;
