@@ -63,7 +63,10 @@ return [
     | WebSocket Server Configuration
     |--------------------------------------------------------------------------
     |
-    | Configuration specific to the WebSocket broadcasting server.
+    | Here you may define settings specific to the WebSocket broadcasting server.
+    | This includes host, port, SSL, authentication, channels, and performance settings.
+    |
+    | Note: You can customize max connections, heartbeat intervals, and allowed origins.
     |
     */
 
@@ -75,22 +78,22 @@ return [
         'ssl_cert' => env('WEBSOCKET_SSL_CERT'),
         'ssl_key' => env('WEBSOCKET_SSL_KEY'),
         'allow_self_signed' => (bool) env('WEBSOCKET_ALLOW_SELF_SIGNED', false),
-        
+
         // Authentication
         'app_key' => env('WEBSOCKET_APP_KEY', 'doppar-app-key'),
         'app_secret' => env('WEBSOCKET_APP_SECRET', 'doppar-app-secret'),
-        
+
         // Broadcasting Channel
         'channel' => env('WEBSOCKET_CHANNEL', 'doppar-broadcast'),
-        
+
         // Connection Management
         'max_connections' => (int) env('WEBSOCKET_MAX_CONNECTIONS', 1000),
         'connection_timeout' => (int) env('WEBSOCKET_CONNECTION_TIMEOUT', 180),
-        
+
         // Performance Settings
         'heartbeat_interval' => (int) env('WEBSOCKET_HEARTBEAT_INTERVAL', 30),
         'redis_poll_interval' => (float) env('WEBSOCKET_REDIS_POLL_INTERVAL', 0.1),
-        
+
         // Security
         'allowed_origins' => [
             env('WEBSOCKET_ALLOWED_ORIGINS', '*'),
@@ -112,6 +115,5 @@ return [
         'middleware' => ['auth'],
         'enabled' => true,
     ],
-
 
 ];

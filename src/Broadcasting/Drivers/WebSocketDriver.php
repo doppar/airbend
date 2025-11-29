@@ -69,7 +69,7 @@ class WebSocketDriver implements BroadcastDriver
         }
 
         MetricsCollector::startTiming();
-        
+
         try {
             // Validate Redis connection
             if ($this->redis === null) {
@@ -90,16 +90,16 @@ class WebSocketDriver implements BroadcastDriver
             ];
 
             $jsonPayload = json_encode($payload, JSON_THROW_ON_ERROR);
-            
+
             // Push to Redis queue with error handling
             $result = $this->redis->lpush($this->pubsubChannel, $jsonPayload);
-            
+
             if ($result === false) {
                 throw RedisConnectionException::operationFailed('lpush', 'Failed to push message to Redis queue');
             }
 
             MetricsCollector::recordMessage('sent');
-            
+
             Log::debug('Event broadcast to Redis', [
                 'channel' => $channel,
                 'event' => $eventName,
@@ -109,11 +109,10 @@ class WebSocketDriver implements BroadcastDriver
                 'queue_length' => $result,
                 'message_id' => $payload['message_id'],
             ]);
-            
         } catch (\JsonException $e) {
             MetricsCollector::recordError('broadcast');
             throw RedisConnectionException::operationFailed(
-                'json_encode', 
+                'json_encode',
                 'Failed to encode broadcast payload: ' . $e->getMessage(),
                 $e
             );
@@ -125,11 +124,11 @@ class WebSocketDriver implements BroadcastDriver
                 'error_type' => get_class($e),
                 'trace' => $e->getTraceAsString(),
             ]);
-            
+
             if ($e instanceof RedisConnectionException) {
                 throw $e;
             }
-            
+
             throw RedisConnectionException::operationFailed(
                 'broadcast',
                 $e->getMessage(),
@@ -152,7 +151,7 @@ class WebSocketDriver implements BroadcastDriver
     public function authenticate(string $socketId, string $channel, ?array $userData = null): array
     {
         MetricsCollector::startTiming();
-        
+
         try {
             $appKey = ConfigurationManager::get('websocket.app_key', 'doppar-app-key');
             $appSecret = ConfigurationManager::get('websocket.app_secret', 'doppar-app-secret');
@@ -178,7 +177,7 @@ class WebSocketDriver implements BroadcastDriver
             // Private channel authentication
             $stringToSign = "{$socketId}:{$channel}";
             $signature = hash_hmac('sha256', $stringToSign, $appSecret);
-            
+
             Log::debug('Private channel authentication', [
                 'channel' => $channel,
                 'socket_id' => $socketId,
@@ -187,7 +186,6 @@ class WebSocketDriver implements BroadcastDriver
             return [
                 'auth' => "{$appKey}:{$signature}",
             ];
-            
         } catch (\JsonException $e) {
             MetricsCollector::recordError('authentication');
             Log::error('Authentication failed: JSON encoding error', [

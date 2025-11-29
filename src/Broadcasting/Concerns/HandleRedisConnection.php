@@ -25,12 +25,12 @@ trait HandleRedisConnection
 
             // Test the connection
             $result = $this->redis->ping();
-            
+
             // Predis may return different types: string 'PONG' or Status object
             if (is_object($result)) {
                 $result = (string) $result;
             }
-            
+
             if ($result !== 'PONG') {
                 throw RedisConnectionException::connectionFailed('Redis ping failed: expected PONG, got ' . var_export($result, true));
             }
@@ -151,12 +151,12 @@ trait HandleRedisConnection
     protected function sanitizeConfig(array $config): array
     {
         $sanitized = $config;
-        
+
         // Remove or mask sensitive information
         if (isset($sanitized['password'])) {
             $sanitized['password'] = '***';
         }
-        
+
         return $sanitized;
     }
 

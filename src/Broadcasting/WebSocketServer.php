@@ -86,15 +86,15 @@ class WebSocketServer
         if ($this->ssl) {
             $sslCert = ConfigurationManager::get('websocket.ssl_cert');
             $sslKey = ConfigurationManager::get('websocket.ssl_key');
-            
+
             if (!$sslCert || !file_exists($sslCert)) {
                 throw WebSocketException::connectionFailed('SSL certificate file not found or not configured');
             }
-            
+
             if (!$sslKey || !file_exists($sslKey)) {
                 throw WebSocketException::connectionFailed('SSL private key file not found or not configured');
             }
-            
+
             $context = [
                 'ssl' => [
                     'local_cert' => $sslCert,
@@ -209,7 +209,7 @@ class WebSocketServer
             $stats = $handler->getChannelStats();
             $metrics = MetricsCollector::getMetrics();
             $performanceStats = MetricsCollector::getPerformanceStats();
-            
+
             Log::info('WebSocket Server Statistics', [
                 'uptime' => $this->getUptimeFormatted(),
                 'connections' => $metrics['connections'],

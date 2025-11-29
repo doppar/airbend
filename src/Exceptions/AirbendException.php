@@ -4,9 +4,6 @@ namespace Doppar\Airbend\Exceptions;
 
 use Exception;
 
-/**
- * Base exception class for all Airbend-related exceptions
- */
 class AirbendException extends Exception
 {
     /**

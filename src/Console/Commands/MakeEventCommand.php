@@ -83,9 +83,7 @@ class MakeEventCommand extends Command
 namespace {$namespace};
 
 use Doppar\Airbend\Broadcasting\Events\BaseBroadcastEvent;
-// use Doppar\Airbend\Support\Attributes\Broadcast;
 
-// #[Broadcast(channels: $channel))]
 class {$className} extends BaseBroadcastEvent
 {
     /**

@@ -2,9 +2,6 @@
 
 namespace Doppar\Airbend\Exceptions;
 
-/**
- * Exception thrown when broadcast configuration is invalid or missing
- */
 class BroadcastConfigurationException extends AirbendException
 {
     /**

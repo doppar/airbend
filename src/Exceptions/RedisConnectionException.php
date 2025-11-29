@@ -2,9 +2,6 @@
 
 namespace Doppar\Airbend\Exceptions;
 
-/**
- * Exception thrown when Redis connection or operations fail
- */
 class RedisConnectionException extends AirbendException
 {
     /**
