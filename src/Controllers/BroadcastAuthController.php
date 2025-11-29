@@ -3,7 +3,6 @@
 namespace Doppar\Airbend\Controllers;
 
 use Phaseolies\Utilities\Attributes\Middleware;
-use Phaseolies\Support\Facades\Log;
 use Phaseolies\Http\Request;
 use Doppar\Airbend\Support\Facades\Broadcast;
 use Doppar\Airbend\Broadcasting\Channel;
@@ -44,7 +43,7 @@ class BroadcastAuthController extends Controller
         }
 
         try {
-            $authResult = $this->authorizeChannel($request, $channel);
+            $authResult = Channel::authorizeChannel($request, $channel);
 
             if ($authResult === false) {
                 return response()->json([
@@ -93,41 +92,6 @@ class BroadcastAuthController extends Controller
     protected function isValidChannelName(string $channel): bool
     {
         return (bool) preg_match('/^[a-zA-Z0-9\-\_\.]+$/', $channel);
-    }
-
-    /**
-     * Legacy authorization method
-     *
-     * @param Request $request
-     * @param string $channel
-     * @return bool|array
-     */
-    protected function authorizeChannel(Request $request, string $channel): bool|array
-    {
-        $user = $request->user();
-
-        if (!str_starts_with($channel, 'private-') && !str_starts_with($channel, 'presence-')) {
-            return true;
-        }
-
-        if (!$user) {
-            return false;
-        }
-
-        if (preg_match('/^private-user\.(\d+)$/', $channel, $matches)) {
-            return $user->id == $matches[1];
-        }
-
-        if (preg_match('/^presence-room\.(\d+)$/', $channel, $matches)) {
-            return $this->getUserData($request);
-        }
-
-        if (preg_match('/^private-team\.(\d+)$/', $channel, $matches)) {
-            $teamId = $matches[1];
-            return $user->teams()->where('id', $teamId)->exists();
-        }
-
-        return false;
     }
 
     /**
