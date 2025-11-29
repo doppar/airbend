@@ -6,9 +6,6 @@ use Doppar\Airbend\Configuration\ConfigurationManager;
 use Exception;
 use Predis\Client;
 
-/**
- * Metrics collector for monitoring Airbend performance
- */
 class MetricsCollector
 {
     /**

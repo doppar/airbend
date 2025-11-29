@@ -4,9 +4,6 @@ namespace Doppar\Airbend\Configuration;
 
 use Doppar\Airbend\Exceptions\BroadcastConfigurationException;
 
-/**
- * Configuration manager for Airbend package
- */
 class ConfigurationManager
 {
     /**
@@ -62,7 +59,7 @@ class ConfigurationManager
         if ($value === null && $default !== null) {
             $value = $default;
         }
-        
+
         // Validate if schema exists for this key
         if (static::hasSchema($key)) {
             $value = static::validateAndNormalize($key, $value);
@@ -89,8 +86,8 @@ class ConfigurationManager
         // Handle required fields
         if (($schema['required'] ?? false) && $value === null) {
             throw BroadcastConfigurationException::invalidConfigurationValue(
-                $key, 
-                $value, 
+                $key,
+                $value,
                 $schema['type']
             );
         }
@@ -103,8 +100,8 @@ class ConfigurationManager
         // Type validation
         if ($value !== null && !static::validateType($value, $schema['type'])) {
             throw BroadcastConfigurationException::invalidConfigurationValue(
-                $key, 
-                $value, 
+                $key,
+                $value,
                 $schema['type']
             );
         }
@@ -113,15 +110,15 @@ class ConfigurationManager
         if (is_numeric($value)) {
             if (isset($schema['min']) && $value < $schema['min']) {
                 throw BroadcastConfigurationException::invalidConfigurationValue(
-                    $key, 
-                    $value, 
+                    $key,
+                    $value,
                     "minimum value of {$schema['min']}"
                 );
             }
             if (isset($schema['max']) && $value > $schema['max']) {
                 throw BroadcastConfigurationException::invalidConfigurationValue(
-                    $key, 
-                    $value, 
+                    $key,
+                    $value,
                     "maximum value of {$schema['max']}"
                 );
             }
@@ -211,7 +208,7 @@ class ConfigurationManager
     public static function getDriverConfig(string $driver): array
     {
         $config = static::get("connections.{$driver}");
-        
+
         if (!$config) {
             throw BroadcastConfigurationException::missingDriverConfiguration($driver);
         }
@@ -242,14 +239,13 @@ class ConfigurationManager
             // Validate default driver exists
             $defaultDriver = static::get('default');
             $connections = static::get('connections', []);
-            
+
             if (!isset($connections[$defaultDriver])) {
                 $errors['default'] = "Default driver '{$defaultDriver}' is not configured in connections.";
             }
 
             // Validate WebSocket configuration
             static::getWebSocketConfig();
-
         } catch (BroadcastConfigurationException $e) {
             $errors[$e->getContext()['key'] ?? 'unknown'] = $e->getMessage();
         }

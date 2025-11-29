@@ -2,9 +2,6 @@
 
 namespace Doppar\Airbend\Exceptions;
 
-/**
- * Exception thrown when WebSocket operations fail
- */
 class WebSocketException extends AirbendException
 {
     /**

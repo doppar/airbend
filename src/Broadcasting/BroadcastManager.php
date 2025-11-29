@@ -52,7 +52,7 @@ class BroadcastManager
     public function __construct()
     {
         $this->defaultDriver = ConfigurationManager::get('default', 'websocket');
-        
+
         $errors = ConfigurationManager::validateConfiguration();
         if (!empty($errors)) {
             throw new BroadcastConfigurationException(
@@ -72,7 +72,7 @@ class BroadcastManager
     public function channel(string|array $channels, BroadcastEvent $event): void
     {
         MetricsCollector::startTiming();
-        
+
         try {
             // Get channels from event if not explicitly provided
             if (empty($channels)) {
@@ -124,7 +124,7 @@ class BroadcastManager
                         'except' => $this->exceptSocketId,
                         'to_others' => $this->toOthers,
                     ]);
-                    
+
                     $successCount++;
                     MetricsCollector::recordChannel('broadcast');
                 } catch (\Exception $e) {
@@ -143,7 +143,6 @@ class BroadcastManager
                 'successful' => $successCount,
                 'failed' => count($channels) - $successCount,
             ]);
-
         } finally {
             // Reset flags for next broadcast
             $this->reset();
@@ -237,7 +236,7 @@ class BroadcastManager
     {
         try {
             $config = ConfigurationManager::getDriverConfig($driver);
-            
+
             return match ($config['driver'] ?? $driver) {
                 'websocket' => $this->createWebSocketDriver(),
                 'null' => new NullDriver(),
@@ -327,6 +326,28 @@ class BroadcastManager
     public function authenticate(string $socketId, string $channel, ?array $userData = null): array
     {
         return $this->driver()->authenticate($socketId, $channel, $userData);
+    }
+
+    /**
+     * Broadcast event using channels defined in the event
+     *
+     * @param BroadcastEvent $event
+     * @return self
+     * @throws BroadcastConfigurationException
+     */
+    public function event(BroadcastEvent $event): self
+    {
+        $channels = $event->broadcastOn();
+
+        if (empty($channels)) {
+            throw new BroadcastConfigurationException(
+                'No channels specified in event broadcastOn() method for: ' . get_class($event)
+            );
+        }
+
+        $this->channel($channels, $event);
+
+        return $this;
     }
 
     /**

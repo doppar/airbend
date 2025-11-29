@@ -111,14 +111,13 @@ class WebSocketHandler
                 'remote_address' => $this->clientMetadata[$connectionId]['remote_address'],
                 'total_connections' => $this->clients->count(),
             ]);
-
         } catch (\Exception $e) {
             MetricsCollector::recordError('connection');
             Log::error('Error handling new WebSocket connection', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            
+
             try {
                 $conn->close();
             } catch (\Exception $closeException) {
@@ -140,11 +139,11 @@ class WebSocketHandler
     {
         $fromId = $from->id;
         $metadata = $this->clientMetadata[$fromId] ?? null;
-        
+
         try {
             MetricsCollector::recordMessage('received');
             MetricsCollector::startTiming();
-            
+
             // Validate message size
             if (strlen($msg) > 64 * 1024) { // 64KB limit
                 throw WebSocketException::invalidMessageFormat('Message size exceeds 64KB limit');
@@ -186,7 +185,6 @@ class WebSocketHandler
                 'client-event' => $this->handleClientEvent($from, $channel, $eventData),
                 default => $this->handleBroadcast($from, $event, $channel, $eventData),
             };
-            
         } catch (\JsonException $e) {
             MetricsCollector::recordError('connection');
             Log::warning('Invalid JSON message received', [
@@ -196,7 +194,6 @@ class WebSocketHandler
                 'message_preview' => substr($msg, 0, 100),
             ]);
             $this->sendError($from, 'Invalid JSON format');
-            
         } catch (WebSocketException $e) {
             MetricsCollector::recordError('connection');
             Log::warning('WebSocket message error', [
@@ -206,7 +203,6 @@ class WebSocketHandler
             ]);
             $this->sendError($from, $e->getMessage());
         }
-
     }
 
     /**
@@ -219,7 +215,7 @@ class WebSocketHandler
     {
         $connectionId = $conn->id;
         $metadata = $this->clientMetadata[$connectionId] ?? null;
-        
+
         try {
             $this->removeFromAllChannels($conn);
             $this->clients->detach($conn);
@@ -241,7 +237,6 @@ class WebSocketHandler
             }
 
             unset($this->clientMetadata[$connectionId]);
-            
         } catch (\Exception $e) {
             Log::error('Error during connection close cleanup', [
                 'connection_id' => $connectionId,
@@ -262,9 +257,9 @@ class WebSocketHandler
     {
         $connectionId = $conn->id;
         $metadata = $this->clientMetadata[$connectionId] ?? null;
-        
+
         MetricsCollector::recordError('connection');
-        
+
         Log::error('WebSocket connection error', [
             'connection_id' => $connectionId,
             'socket_id' => $metadata['socket_id'] ?? 'unknown',
