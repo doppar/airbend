@@ -88,21 +88,17 @@ class Channel
         $authorizer = static::getAuthorizer($channel);
 
         if (!$authorizer) {
-            // No authorizer found - deny by default for private/presence channels
             if (str_starts_with($channel, 'private-') || str_starts_with($channel, 'presence-')) {
                 return false;
             }
 
-            // Public channels are allowed
             return true;
         }
 
-        // Find matching pattern
         foreach (static::$authorizers as $pattern => $callback) {
             if (static::matchesPattern($channel, $pattern)) {
                 $params = static::extractParameters($channel, $pattern);
 
-                // Call authorizer with request and extracted parameters
                 return $callback($request, ...array_values($params));
             }
         }
