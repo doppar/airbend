@@ -49,8 +49,7 @@ class Channel
      */
     protected static function matchesPattern(string $channel, string $pattern): bool
     {
-        $regex = preg_replace('/\{(\w+)\}/', '(?P<$1>[^.]+)', $pattern);
-        $regex = '#^' . $regex . '$#';
+        $regex = static::buildRegexFromPattern($pattern);
 
         return (bool) preg_match($regex, $channel);
     }
@@ -64,8 +63,7 @@ class Channel
      */
     public static function extractParameters(string $channel, string $pattern): array
     {
-        $regex = preg_replace('/\{(\w+)\}/', '(?P<$1>[^.]+)', $pattern);
-        $regex = '#^' . $regex . '$#';
+        $regex = static::buildRegexFromPattern($pattern);
 
         if (preg_match($regex, $channel, $matches)) {
             return array_filter($matches, function ($key) {
@@ -74,6 +72,19 @@ class Channel
         }
 
         return [];
+    }
+
+    /**
+     * Build a regular expression from a channel pattern
+     *
+     * @param string $pattern
+     * @return string
+     */
+    protected static function buildRegexFromPattern(string $pattern): string
+    {
+        $regex = preg_replace('/\{(\w+)\}/', '(?P<$1>[^.]+)', $pattern);
+
+        return '#^' . $regex . '$#';
     }
 
     /**

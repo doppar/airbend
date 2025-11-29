@@ -36,7 +36,7 @@ class RedisSubscriber
      *
      * @var float
      */
-    protected float $pollInterval = 0.1;
+    protected float $pollInterval;
 
     /**
      * Timer ID for polling
@@ -54,6 +54,7 @@ class RedisSubscriber
     {
         $this->handler = $handler;
         $this->pubsubChannel = config('airbend.websocket.channel', 'doppar-broadcast');
+        $this->pollInterval = (float) config('airbend.websocket.redis_poll_interval', 0.1);
     }
 
     /**
@@ -142,7 +143,7 @@ class RedisSubscriber
             Log::debug("📡 Broadcasting to WebSocket clients", [
                 'channel' => $channel,
                 'event' => $event,
-                'subscriber_count' => count($this->handler->channels[$channel] ?? []),
+                'subscriber_count' => $this->handler->getChannelSubscriberCount($channel),
             ]);
 
             $exceptConnectionId = null;

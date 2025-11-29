@@ -7,10 +7,10 @@ use Phaseolies\Facade\BaseFacade;
 /**
  * Provides a static interface to the broadcasting system
  *
- * @method static channel(string|array $channels, \Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent $event)
- * @method static toOthers(\Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent $event)
+ * @method static void channel(string|array $channels, \Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent $event)
+ * @method static \Doppar\Airbend\Broadcasting\BroadcastManager toOthers()
  * @method static \Doppar\Airbend\Broadcasting\BroadcastManager driver(string|null $driver = null)
- * @method static connection(string|null $connection = null)
+ * @method static mixed __callStatic(string $method, array $arguments)
  *
  * @see \Doppar\Airbend\Broadcasting\BroadcastManager
  */
