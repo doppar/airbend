@@ -4,6 +4,7 @@ namespace Doppar\Airbend;
 
 use Phaseolies\Providers\ServiceProvider;
 use Doppar\Airbend\Broadcasting\BroadcastManager;
+use Doppar\Airbend\Console\Commands\MakeEventCommand;
 use Doppar\Airbend\Console\Commands\WebSocketStartCommand;
 
 class AirbendServiceProvider extends ServiceProvider
@@ -42,7 +43,8 @@ class AirbendServiceProvider extends ServiceProvider
         ], 'public');
 
         $this->commands([
-            WebSocketStartCommand::class
+            WebSocketStartCommand::class,
+            MakeEventCommand::class
         ]);
     }
 
