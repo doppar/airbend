@@ -68,7 +68,7 @@ class NotificationCreated extends BaseBroadcastEvent
 3. **Publish the configuration**:
 
 ```bash
-php pool airbend:install
+php pool vendor:publish --provider="Doppar\Airbend\AirbendServiceProvider"
 ```
 
 4. **Create a controller** in `app/Http/Controllers/NotificationController.php`:
