@@ -142,7 +142,7 @@ class RedisSubscriber
             Log::debug("📡 Broadcasting to WebSocket clients", [
                 'channel' => $channel,
                 'event' => $event,
-                'subscriber_count' => count($this->handler->channels[$channel] ?? []),
+                'subscriber_count' => $this->handler->getChannelSubscriberCount($channel),
             ]);
 
             $exceptConnectionId = null;

@@ -98,7 +98,8 @@ trait HandleRedisConnection
      */
     protected function getConnectionOptions(): array
     {
-        $redisConfig = config('airbend.connections.redis');
+        // Use the Redis configuration attached to the websocket connection
+        $redisConfig = config('airbend.connections.websocket.redis') ?? [];
         $params = $redisConfig['options']['parameters'] ?? [];
 
         $options = [

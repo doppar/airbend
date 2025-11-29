@@ -121,8 +121,8 @@ class WebSocketServer
 
             try {
                 // Create and initialize Redis subscriber in worker context
-                $redisSubscriber = new RedisSubscriber($handler);
-                $redisSubscriber->initialize();
+                $this->redisSubscriber = new RedisSubscriber($handler);
+                $this->redisSubscriber->initialize();
 
                 Log::info('Redis subscriber successfully initialized');
             } catch (\Exception $e) {
