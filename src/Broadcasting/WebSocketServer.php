@@ -57,13 +57,14 @@ class WebSocketServer
      * @param string $host
      * @param int $port
      * @param bool $ssl
+     * @param WebSocketHandler|null $handler
      */
-    public function __construct(string $host = '127.0.0.1', int $port = 6001, bool $ssl = false)
+    public function __construct(string $host = '127.0.0.1', int $port = 6001, bool $ssl = false, ?WebSocketHandler $handler = null)
     {
         $this->host = $host;
         $this->port = $port;
         $this->ssl = $ssl;
-        $this->handler = new WebSocketHandler();
+        $this->handler = $handler ?? new WebSocketHandler();
         $this->startTime = time();
     }
 

@@ -79,6 +79,7 @@ return [
         'max_connections' => env('WEBSOCKET_MAX_CONNECTIONS', 1000),
         'connection_timeout' => env('WEBSOCKET_CONNECTION_TIMEOUT', 180),
         'heartbeat_interval' => env('WEBSOCKET_HEARTBEAT_INTERVAL', 30),
+        'redis_poll_interval' => env('WEBSOCKET_REDIS_POLL_INTERVAL', 0.1),
         'allowed_origins' => [
             '*',
         ],
