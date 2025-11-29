@@ -6,6 +6,9 @@ use Phaseolies\Support\Facades\Log;
 use Workerman\Worker;
 use Workerman\Connection\TcpConnection;
 use Workerman\Timer;
+use Doppar\Airbend\Configuration\ConfigurationManager;
+use Doppar\Airbend\Monitoring\MetricsCollector;
+use Doppar\Airbend\Exceptions\WebSocketException;
 
 class WebSocketServer
 {
@@ -54,16 +57,16 @@ class WebSocketServer
     /**
      * Create a new WebSocket server instance.
      *
-     * @param string $host
-     * @param int $port
-     * @param bool $ssl
+     * @param string|null $host
+     * @param int|null $port
+     * @param bool|null $ssl
      * @param WebSocketHandler|null $handler
      */
-    public function __construct(string $host = '127.0.0.1', int $port = 6001, bool $ssl = false, ?WebSocketHandler $handler = null)
+    public function __construct(?string $host = null, ?int $port = null, ?bool $ssl = null, ?WebSocketHandler $handler = null)
     {
-        $this->host = $host;
-        $this->port = $port;
-        $this->ssl = $ssl;
+        $this->host = $host ?? ConfigurationManager::get('websocket.host', '127.0.0.1');
+        $this->port = $port ?? ConfigurationManager::get('websocket.port', 6001);
+        $this->ssl = $ssl ?? ConfigurationManager::get('websocket.ssl', false);
         $this->handler = $handler ?? new WebSocketHandler();
         $this->startTime = time();
     }
@@ -72,6 +75,7 @@ class WebSocketServer
      * Start the WebSocket server
      *
      * @return void
+     * @throws WebSocketException
      */
     public function run(): void
     {
@@ -80,11 +84,22 @@ class WebSocketServer
 
         $context = [];
         if ($this->ssl) {
+            $sslCert = ConfigurationManager::get('websocket.ssl_cert');
+            $sslKey = ConfigurationManager::get('websocket.ssl_key');
+            
+            if (!$sslCert || !file_exists($sslCert)) {
+                throw WebSocketException::connectionFailed('SSL certificate file not found or not configured');
+            }
+            
+            if (!$sslKey || !file_exists($sslKey)) {
+                throw WebSocketException::connectionFailed('SSL private key file not found or not configured');
+            }
+            
             $context = [
                 'ssl' => [
-                    'local_cert' => config('airbend.websocket.ssl_cert'),
-                    'local_pk' => config('airbend.websocket.ssl_key'),
-                    'allow_self_signed' => config('airbend.websocket.allow_self_signed', false),
+                    'local_cert' => $sslCert,
+                    'local_pk' => $sslKey,
+                    'allow_self_signed' => ConfigurationManager::get('websocket.allow_self_signed', false),
                     'verify_peer' => false,
                 ],
             ];
@@ -150,7 +165,7 @@ class WebSocketServer
     protected function setupPeriodicTasks(WebSocketHandler $handler): void
     {
         // Heartbeat every 30 seconds
-        $heartbeatInterval = config('airbend.websocket.heartbeat_interval', 30);
+        $heartbeatInterval = ConfigurationManager::get('websocket.heartbeat_interval', 30);
         Timer::add($heartbeatInterval, function () use ($handler) {
             $handler->sendHeartbeat();
             Log::debug('Heartbeat sent to all connected clients');
@@ -192,20 +207,33 @@ class WebSocketServer
     {
         try {
             $stats = $handler->getChannelStats();
+            $metrics = MetricsCollector::getMetrics();
+            $performanceStats = MetricsCollector::getPerformanceStats();
+            
             Log::info('WebSocket Server Statistics', [
                 'uptime' => $this->getUptimeFormatted(),
-                'total_connections' => $stats['total_connections'] ?? 0,
-                'total_channels' => $stats['total_channels'] ?? 0,
-                'memory_usage_mb' => round(memory_get_usage(true) / 1024 / 1024, 2),
-                'channels' => array_map(function ($channel) {
-                    return [
-                        'type' => $channel['type'] ?? 'unknown',
-                        'subscribers' => $channel['subscriber_count'] ?? 0,
-                    ];
-                }, $stats['channels'] ?? [])
+                'connections' => $metrics['connections'],
+                'messages' => $metrics['messages'],
+                'channels' => $metrics['channels'],
+                'errors' => $metrics['errors'],
+                'performance' => $performanceStats,
+                'memory_usage_mb' => $performanceStats['memory']['current_mb'],
+                'handler_stats' => [
+                    'total_connections' => $stats['total_connections'] ?? 0,
+                    'total_channels' => $stats['total_channels'] ?? 0,
+                    'channels' => array_map(function ($channel) {
+                        return [
+                            'type' => $channel['type'] ?? 'unknown',
+                            'subscribers' => $channel['subscriber_count'] ?? 0,
+                        ];
+                    }, $stats['channels'] ?? [])
+                ]
             ]);
         } catch (\Exception $e) {
-            Log::error('Error logging statistics: ' . $e->getMessage());
+            Log::error('Error logging statistics', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
         }
     }
 

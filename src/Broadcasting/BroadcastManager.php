@@ -7,6 +7,9 @@ use Doppar\Airbend\Broadcasting\Drivers\WebSocketDriver;
 use Doppar\Airbend\Broadcasting\Drivers\NullDriver;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
+use Doppar\Airbend\Configuration\ConfigurationManager;
+use Doppar\Airbend\Exceptions\BroadcastConfigurationException;
+use Doppar\Airbend\Monitoring\MetricsCollector;
 use Phaseolies\Support\Facades\Log;
 
 class BroadcastManager
@@ -43,10 +46,19 @@ class BroadcastManager
 
     /**
      * Create a new broadcast manager
+     * 
+     * @throws BroadcastConfigurationException
      */
     public function __construct()
     {
-        $this->defaultDriver = config('airbend.default', 'websocket');
+        $this->defaultDriver = ConfigurationManager::get('default', 'websocket');
+        
+        $errors = ConfigurationManager::validateConfiguration();
+        if (!empty($errors)) {
+            throw new BroadcastConfigurationException(
+                'Invalid Airbend configuration: ' . implode(', ', $errors)
+            );
+        }
     }
 
     /**
@@ -55,57 +67,88 @@ class BroadcastManager
      * @param string|array $channels
      * @param BroadcastEvent $event
      * @return void
+     * @throws BroadcastConfigurationException
      */
     public function channel(string|array $channels, BroadcastEvent $event): void
     {
-        // Get channels from event if not explicitly provided
-        if (empty($channels)) {
-            $channels = $event->broadcastOn();
-        }
+        MetricsCollector::startTiming();
+        
+        try {
+            // Get channels from event if not explicitly provided
+            if (empty($channels)) {
+                $channels = $event->broadcastOn();
+            }
 
-        // Normalize to array
-        $channels = is_array($channels) ? $channels : [$channels];
+            if (empty($channels)) {
+                throw new BroadcastConfigurationException('No channels specified for broadcasting');
+            }
 
-        $driver = $this->driver();
+            // Normalize to array
+            $channels = is_array($channels) ? $channels : [$channels];
 
-        // Handle event-level toOthers configuration
-        if ($event->isBroadcastingToOthers()) {
-            $this->toOthers = true;
-        }
+            $driver = $this->driver();
 
-        // Handle event-level except socket ID
-        if (method_exists($event, 'getExceptSocketId') && $event->getExceptSocketId()) {
-            $this->exceptSocketId = $event->getExceptSocketId();
-        }
+            // Handle event-level toOthers configuration
+            if ($event->isBroadcastingToOthers()) {
+                $this->toOthers = true;
+            }
 
-        // Set except socket ID if toOthers is enabled and no explicit socket ID is set
-        if ($this->toOthers && !$this->exceptSocketId) {
-            $this->exceptSocketId = $this->getCurrentSocketId();
-        }
+            // Handle event-level except socket ID
+            if (method_exists($event, 'getExceptSocketId') && $event->getExceptSocketId()) {
+                $this->exceptSocketId = $event->getExceptSocketId();
+            }
 
-        Log::debug('Broadcasting to channels', [
-            'channels' => $channels,
-            'event' => get_class($event),
-            'event_name' => $event->broadcastAs(),
-            'to_others' => $this->toOthers,
-            'except_socket' => $this->exceptSocketId,
-        ]);
+            // Set except socket ID if toOthers is enabled and no explicit socket ID is set
+            if ($this->toOthers && !$this->exceptSocketId) {
+                $this->exceptSocketId = $this->getCurrentSocketId();
+            }
 
-        // Broadcast to each channel separately
-        foreach ($channels as $channel) {
-            Log::debug('Broadcasting to channel', [
-                'channel' => $channel,
-                'event' => $event->broadcastAs(),
-            ]);
-
-            $driver->broadcast($channel, $event, [
-                'except' => $this->exceptSocketId,
+            Log::debug('Broadcasting to channels', [
+                'channels' => $channels,
+                'event' => get_class($event),
+                'event_name' => $event->broadcastAs(),
                 'to_others' => $this->toOthers,
+                'except_socket' => $this->exceptSocketId,
             ]);
-        }
 
-        // Reset flags for next broadcast
-        $this->reset();
+            // Broadcast to each channel separately
+            $successCount = 0;
+            foreach ($channels as $channel) {
+                try {
+                    Log::debug('Broadcasting to channel', [
+                        'channel' => $channel,
+                        'event' => $event->broadcastAs(),
+                    ]);
+
+                    $driver->broadcast($channel, $event, [
+                        'except' => $this->exceptSocketId,
+                        'to_others' => $this->toOthers,
+                    ]);
+                    
+                    $successCount++;
+                    MetricsCollector::recordChannel('broadcast');
+                } catch (\Exception $e) {
+                    MetricsCollector::recordError('broadcast');
+                    Log::error('Failed to broadcast to channel', [
+                        'channel' => $channel,
+                        'event' => $event->broadcastAs(),
+                        'error' => $e->getMessage(),
+                    ]);
+                    // Continue with other channels
+                }
+            }
+
+            Log::info('Broadcast completed', [
+                'total_channels' => count($channels),
+                'successful' => $successCount,
+                'failed' => count($channels) - $successCount,
+            ]);
+
+        } finally {
+            // Reset flags for next broadcast
+            $this->reset();
+            MetricsCollector::endTiming('broadcast');
+        }
     }
 
     /**
@@ -188,21 +231,25 @@ class BroadcastManager
      *
      * @param string $driver
      * @return BroadcastDriver
-     * @throws \InvalidArgumentException
+     * @throws BroadcastConfigurationException
      */
     protected function createDriver(string $driver): BroadcastDriver
     {
-        $config = config("airbend.connections.{$driver}");
-
-        if (!$config) {
-            throw new \InvalidArgumentException("Broadcasting driver [{$driver}] is not configured.");
+        try {
+            $config = ConfigurationManager::getDriverConfig($driver);
+            
+            return match ($config['driver'] ?? $driver) {
+                'websocket' => $this->createWebSocketDriver(),
+                'null' => new NullDriver(),
+                default => throw BroadcastConfigurationException::unsupportedDriver($config['driver'] ?? $driver),
+            };
+        } catch (BroadcastConfigurationException $e) {
+            Log::error('Failed to create broadcasting driver', [
+                'driver' => $driver,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
         }
-
-        return match ($config['driver'] ?? $driver) {
-            'websocket' => $this->createWebSocketDriver(),
-            'null' => new NullDriver(),
-            default => throw new \InvalidArgumentException("Driver [{$driver}] is not supported."),
-        };
     }
 
     /**

@@ -1,64 +1,77 @@
-## Dependency 
+# Airbend
+
+Real-time WebSocket broadcasting for Doppar framework.
+
+## Requirements
+
+Check that your system has the required PHP extensions:
+
 ```bash
-php -m | grep -E 'pcntl|posix|event'
+php -m | grep -E "(sockets|pcntl|posix)"
 ```
 
-Check if the following extensions are enabled:
-- pcntl
-- posix
-- event [Optional for better performance]
+## Quick Setup
 
-## Step 1
+1. **Create a broadcast event** in `app/Events/NotificationCreated.php`:
+
 ```php
 <?php
 
 namespace App\Events;
 
-use Doppar\Airbend\Support\Attributes\Broadcast;
 use Doppar\Airbend\Broadcasting\Events\BaseBroadcastEvent;
 
-// #[Broadcast(channels: 'notifications', as: 'system_update_listener')]
-class SystemUpdate extends BaseBroadcastEvent
+class NotificationCreated extends BaseBroadcastEvent
 {
     public function __construct(
-        public string $message,
-        public string $level = 'info'
+        public readonly array $notification,
+        public readonly ?int $userId = null
     ) {}
 
     public function broadcastOn(): array
     {
-        return ['system_update'];
+        return $this->userId 
+            ? ["user.{$this->userId}.notifications", 'notifications']
+            : ['notifications'];
     }
 
     public function broadcastAs(): string
     {
-        return 'system_update_listener';
+        return 'notification.created';
     }
 
     public function broadcastWith(): array
     {
         return [
-            'message' => $this->message,
-            'level' => $this->level,
-            'timestamp' => now()->toIso8601String(),
+            'id' => $this->notification['id'],
+            'message' => $this->notification['message'],
+            'created_at' => $this->notification['created_at'],
         ];
+    }
+
+    public function shouldBroadcast(): bool
+    {
+        return !empty($this->notification['message']);
     }
 }
 ```
 
-## Setp 2
+2. **Register the service provider** in `config/app.php`:
+
 ```php
-"providers" => [
-    \Doppar\Airbend\AirbendServiceProvider::class,
+'providers' => [
+    // ... other providers
+    Doppar\Airbend\AirbendServiceProvider::class,
 ],
 ```
 
-### Step 3
+3. **Publish the configuration**:
+
 ```bash
-php pool vendor:publish --provider="Doppar\Airbend\AirbendServiceProvider"
+php pool airbend:install
 ```
 
-### Step 4
+4. **Create a controller** in `app/Http/Controllers/NotificationController.php`:
 ```php
 <?php
 
@@ -66,24 +79,32 @@ namespace App\Http\Controllers;
 
 use Phaseolies\Utilities\Attributes\Route;
 use Doppar\Airbend\Support\Facades\Broadcast;
-use App\Http\Controllers\Controller;
-use App\Events\SystemUpdate;
 use App\Events\NotificationCreated;
 
-class SocketController extends Controller
+class NotificationController extends Controller
 {
-    #[Route(uri: 'socket/{clientId}')]
-    public function socketServer(int $clientId)
+    #[Route(uri: 'notifications')]
+    public function create()
     {
-        Broadcast::channel('system_update', new SystemUpdate('Database backup completed'));
-        // broadcast(new SystemUpdate('System maintenance scheduled', 'warning'));
+        $notification = [
+            'id' => 1,
+            'message' => 'Welcome to Airbend!',
+            'created_at' => now()->toISOString(),
+        ];
 
-        return view('socket');
+        // Simple broadcast
+        Broadcast::channel('notifications', new NotificationCreated($notification));
+
+        // Or use the helper function
+        broadcast('notifications', new NotificationCreated($notification));
+
+        return response()->json(['status' => 'sent']);
     }
 }
 ```
 
-## Step 5
+5. **Create an HTML client** (example):
+
 ```html
 <!DOCTYPE html>
 <html>
@@ -203,22 +224,20 @@ class SocketController extends Controller
         });
 
         // ====================================================================
-        // Subscribe to Channel and Listen for Events
+        // Subscribe to Channel and Listen for Events  
         // ====================================================================
-        const channel = doppar.channel('system_update');
+        const channel = doppar.channel('notifications');
 
-        // The event name here must match broadcastAs() in event
-        channel.listen('system_update_listener', (data) => {
-            console.log('[App] Received system update:', data);
-
-            // Display the message
+        channel.listen('notification.created', (data) => {
+            console.log('Received notification:', data);
+            
             addMessage(
-                `${data.message} (${data.timestamp})`,
-                data.level || 'info'
+                `${data.message} (ID: ${data.id})`,
+                'info'
             );
 
             if (Notification.permission === 'granted') {
-                new Notification('System Update', {
+                new Notification('New Notification', {
                     body: data.message,
                     icon: '/icon.png'
                 });
@@ -227,8 +246,8 @@ class SocketController extends Controller
 
         // Listen for subscription success
         channel.listen('subscribed', () => {
-            console.log('[App] Successfully subscribed to system_update channel');
-            addMessage('Subscribed to system_update channel', 'success');
+            console.log('Successfully subscribed to notifications channel');
+            addMessage('Subscribed to notifications channel', 'success');
         });
 
         function updateStatus(status, text) {
@@ -250,12 +269,12 @@ class SocketController extends Controller
 
         function testBroadcast() {
             // Trigger a server-side broadcast
-            fetch('/socket/1')
+            fetch('/notifications')
                 .then(() => {
-                    addMessage('Test broadcast triggered', 'info');
+                    addMessage('Test notification sent', 'info');
                 })
                 .catch(err => {
-                    addMessage('Failed to trigger broadcast: ' + err, 'error');
+                    addMessage('Failed to send notification: ' + err, 'error');
                 });
         }
 
@@ -282,10 +301,14 @@ class SocketController extends Controller
 </html>
 ```
 
-## Step 6
+6. **Start the servers**:
+
 ```bash
+# Start the web server
 php pool server:start
+
+# Start the WebSocket server
 php pool websocket:start
 ```
 
-Now open 2 tab in your browser, trigger `testBroadcast` button and check update in both browser tab.
+Now open the HTML page in multiple browser tabs and click the "Send Test Broadcast" button to see real-time notifications across all tabs.

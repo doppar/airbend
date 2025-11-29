@@ -7,6 +7,9 @@ use Phaseolies\Support\Facades\Log;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesPresence;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesChannels;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesAuthentication;
+use Doppar\Airbend\Exceptions\WebSocketException;
+use Doppar\Airbend\Monitoring\MetricsCollector;
+use Doppar\Airbend\Configuration\ConfigurationManager;
 
 class WebSocketHandler
 {
@@ -69,27 +72,61 @@ class WebSocketHandler
      */
     public function onOpen(TcpConnection $conn): void
     {
-        $this->clients->attach($conn);
+        try {
+            $maxConnections = ConfigurationManager::get('websocket.max_connections', 1000);
+            if ($this->clients->count() >= $maxConnections) {
+                Log::warning('Maximum connections reached, rejecting new connection');
+                $conn->close();
+                MetricsCollector::recordConnection('failed');
+                return;
+            }
 
-        $socketId = $this->generateSocketId();
-        $connectionId = $conn->id;
-        $this->clientMetadata[$connectionId] = [
-            'socket_id' => $socketId,
-            'auth_data' => null,
-            'last_heartbeat' => time(),
-            'subscribed_channels' => [],
-        ];
+            $this->clients->attach($conn);
+            MetricsCollector::recordConnection('connect');
 
-        // Send connection established event
-        $this->sendToClient($conn, [
-            'event' => 'doppar:connection_established',
-            'data' => json_encode([
+            $socketId = $this->generateSocketId();
+            $connectionId = $conn->id;
+            $this->clientMetadata[$connectionId] = [
                 'socket_id' => $socketId,
-                'activity_timeout' => 120,
-            ]),
-        ]);
+                'auth_data' => null,
+                'last_heartbeat' => time(),
+                'subscribed_channels' => [],
+                'connected_at' => time(),
+                'remote_address' => $conn->getRemoteAddress() ?? 'unknown',
+            ];
 
-        Log::info("WebSocket connection opened: {$connectionId} (socket: {$socketId})");
+            // Send connection established event
+            $connectionTimeout = ConfigurationManager::get('websocket.connection_timeout', 180);
+            $this->sendToClient($conn, [
+                'event' => 'doppar:connection_established',
+                'data' => json_encode([
+                    'socket_id' => $socketId,
+                    'activity_timeout' => $connectionTimeout,
+                ], JSON_THROW_ON_ERROR),
+            ]);
+
+            Log::info('WebSocket connection opened', [
+                'connection_id' => $connectionId,
+                'socket_id' => $socketId,
+                'remote_address' => $this->clientMetadata[$connectionId]['remote_address'],
+                'total_connections' => $this->clients->count(),
+            ]);
+
+        } catch (\Exception $e) {
+            MetricsCollector::recordError('connection');
+            Log::error('Error handling new WebSocket connection', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            try {
+                $conn->close();
+            } catch (\Exception $closeException) {
+                Log::error('Failed to close connection after error', [
+                    'error' => $closeException->getMessage(),
+                ]);
+            }
+        }
     }
 
     /**
@@ -99,23 +136,47 @@ class WebSocketHandler
      * @param string $msg
      * @return void
      */
-    public function onMessage(TcpConnection $from, $msg): void
+    public function onMessage(TcpConnection $from, string $msg): void
     {
+        $fromId = $from->id;
+        $metadata = $this->clientMetadata[$fromId] ?? null;
+        
         try {
-            $data = json_decode($msg, true);
+            MetricsCollector::recordMessage('received');
+            MetricsCollector::startTiming();
+            
+            // Validate message size
+            if (strlen($msg) > 64 * 1024) { // 64KB limit
+                throw WebSocketException::invalidMessageFormat('Message size exceeds 64KB limit');
+            }
 
-            if (!isset($data['event'])) {
-                $this->sendError($from, 'Missing event field');
-                return;
+            $data = json_decode($msg, true, 512, JSON_THROW_ON_ERROR);
+
+            if (!is_array($data) || !isset($data['event'])) {
+                throw WebSocketException::invalidMessageFormat('Missing or invalid event field');
             }
 
             $event = $data['event'];
             $channel = $data['channel'] ?? null;
             $eventData = $data['data'] ?? [];
 
+            // Validate event name
+            if (!is_string($event) || empty($event)) {
+                throw WebSocketException::invalidMessageFormat('Event name must be a non-empty string');
+            }
+
             // Update last activity
-            $fromId = $from->id;
-            $this->clientMetadata[$fromId]['last_heartbeat'] = time();
+            if ($metadata) {
+                $this->clientMetadata[$fromId]['last_heartbeat'] = time();
+            }
+
+            Log::debug('WebSocket message received', [
+                'connection_id' => $fromId,
+                'socket_id' => $metadata['socket_id'] ?? 'unknown',
+                'event' => $event,
+                'channel' => $channel,
+                'data_size' => strlen($msg),
+            ]);
 
             // Route the message based on event type
             match ($event) {
@@ -125,10 +186,27 @@ class WebSocketHandler
                 'client-event' => $this->handleClientEvent($from, $channel, $eventData),
                 default => $this->handleBroadcast($from, $event, $channel, $eventData),
             };
-        } catch (\Exception $e) {
-            Log::error("Error processing message: " . $e->getMessage());
-            $this->sendError($from, 'Invalid message format');
+            
+        } catch (\JsonException $e) {
+            MetricsCollector::recordError('connection');
+            Log::warning('Invalid JSON message received', [
+                'connection_id' => $fromId,
+                'socket_id' => $metadata['socket_id'] ?? 'unknown',
+                'error' => $e->getMessage(),
+                'message_preview' => substr($msg, 0, 100),
+            ]);
+            $this->sendError($from, 'Invalid JSON format');
+            
+        } catch (WebSocketException $e) {
+            MetricsCollector::recordError('connection');
+            Log::warning('WebSocket message error', [
+                'connection_id' => $fromId,
+                'socket_id' => $metadata['socket_id'] ?? 'unknown',
+                'error' => $e->getMessage(),
+            ]);
+            $this->sendError($from, $e->getMessage());
         }
+
     }
 
     /**
@@ -140,13 +218,36 @@ class WebSocketHandler
     public function onClose(TcpConnection $conn): void
     {
         $connectionId = $conn->id;
+        $metadata = $this->clientMetadata[$connectionId] ?? null;
+        
+        try {
+            $this->removeFromAllChannels($conn);
+            $this->clients->detach($conn);
+            MetricsCollector::recordConnection('disconnect');
 
-        $this->removeFromAllChannels($conn);
-        $this->clients->detach($conn);
+            if ($metadata) {
+                $connectionDuration = time() - ($metadata['connected_at'] ?? time());
+                Log::info('WebSocket connection closed', [
+                    'connection_id' => $connectionId,
+                    'socket_id' => $metadata['socket_id'] ?? 'unknown',
+                    'duration_seconds' => $connectionDuration,
+                    'channels_count' => count($metadata['subscribed_channels'] ?? []),
+                    'total_connections' => $this->clients->count(),
+                ]);
+            } else {
+                Log::info('WebSocket connection closed (no metadata)', [
+                    'connection_id' => $connectionId,
+                ]);
+            }
 
-        unset($this->clientMetadata[$connectionId]);
-
-        Log::info("WebSocket connection closed: {$connectionId}");
+            unset($this->clientMetadata[$connectionId]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error during connection close cleanup', [
+                'connection_id' => $connectionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -160,10 +261,26 @@ class WebSocketHandler
     public function onError(TcpConnection $conn, int $code, string $msg): void
     {
         $connectionId = $conn->id;
+        $metadata = $this->clientMetadata[$connectionId] ?? null;
+        
+        MetricsCollector::recordError('connection');
+        
+        Log::error('WebSocket connection error', [
+            'connection_id' => $connectionId,
+            'socket_id' => $metadata['socket_id'] ?? 'unknown',
+            'error_code' => $code,
+            'error_message' => $msg,
+            'remote_address' => $metadata['remote_address'] ?? 'unknown',
+        ]);
 
-        Log::error("WebSocket error on connection {$connectionId}: {$code} - {$msg}");
-
-        $conn->close();
+        try {
+            $conn->close();
+        } catch (\Exception $e) {
+            Log::error('Failed to close connection after error', [
+                'connection_id' => $connectionId,
+                'close_error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
