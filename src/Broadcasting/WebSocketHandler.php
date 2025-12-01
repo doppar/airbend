@@ -379,7 +379,8 @@ class WebSocketHandler
         }
 
         // Broadcast to all channel subscribers except sender
-        $this->broadcastToChannel($channel, $data, $from->id);
+        $message = array_merge($data, ['channel' => $channel]);
+        $this->broadcastToChannel($channel, $message, $from->id);
     }
 
     /**
