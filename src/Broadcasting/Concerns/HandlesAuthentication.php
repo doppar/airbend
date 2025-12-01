@@ -129,7 +129,5 @@ trait HandlesAuthentication
             'event' => 'doppar:subscription_succeeded',
             'channel' => $channel,
         ]);
-
-        Log::info("Client {$conn->id} subscribed to private channel: {$channel}");
     }
 }

@@ -75,7 +75,6 @@ class WebSocketHandler
         try {
             $maxConnections = ConfigurationManager::get('websocket.max_connections', 1000);
             if ($this->clients->count() >= $maxConnections) {
-                Log::warning('Maximum connections reached, rejecting new connection');
                 $conn->close();
                 MetricsCollector::recordConnection('failed');
                 return;
@@ -103,13 +102,6 @@ class WebSocketHandler
                     'socket_id' => $socketId,
                     'activity_timeout' => $connectionTimeout,
                 ], JSON_THROW_ON_ERROR),
-            ]);
-
-            Log::info('WebSocket connection opened', [
-                'connection_id' => $connectionId,
-                'socket_id' => $socketId,
-                'remote_address' => $this->clientMetadata[$connectionId]['remote_address'],
-                'total_connections' => $this->clients->count(),
             ]);
         } catch (\Exception $e) {
             MetricsCollector::recordError('connection');
@@ -169,14 +161,6 @@ class WebSocketHandler
                 $this->clientMetadata[$fromId]['last_heartbeat'] = time();
             }
 
-            Log::debug('WebSocket message received', [
-                'connection_id' => $fromId,
-                'socket_id' => $metadata['socket_id'] ?? 'unknown',
-                'event' => $event,
-                'channel' => $channel,
-                'data_size' => strlen($msg),
-            ]);
-
             // Route the message based on event type
             match ($event) {
                 'doppar:subscribe' => $this->handleSubscribe($from, $channel, $eventData),
@@ -220,22 +204,6 @@ class WebSocketHandler
             $this->removeFromAllChannels($conn);
             $this->clients->detach($conn);
             MetricsCollector::recordConnection('disconnect');
-
-            if ($metadata) {
-                $connectionDuration = time() - ($metadata['connected_at'] ?? time());
-                Log::info('WebSocket connection closed', [
-                    'connection_id' => $connectionId,
-                    'socket_id' => $metadata['socket_id'] ?? 'unknown',
-                    'duration_seconds' => $connectionDuration,
-                    'channels_count' => count($metadata['subscribed_channels'] ?? []),
-                    'total_connections' => $this->clients->count(),
-                ]);
-            } else {
-                Log::info('WebSocket connection closed (no metadata)', [
-                    'connection_id' => $connectionId,
-                ]);
-            }
-
             unset($this->clientMetadata[$connectionId]);
         } catch (\Exception $e) {
             Log::error('Error during connection close cleanup', [
@@ -256,17 +224,9 @@ class WebSocketHandler
     public function onError(TcpConnection $conn, int $code, string $msg): void
     {
         $connectionId = $conn->id;
-        $metadata = $this->clientMetadata[$connectionId] ?? null;
+        $this->clientMetadata[$connectionId] ?? null;
 
         MetricsCollector::recordError('connection');
-
-        Log::error('WebSocket connection error', [
-            'connection_id' => $connectionId,
-            'socket_id' => $metadata['socket_id'] ?? 'unknown',
-            'error_code' => $code,
-            'error_message' => $msg,
-            'remote_address' => $metadata['remote_address'] ?? 'unknown',
-        ]);
 
         try {
             $conn->close();
@@ -324,8 +284,6 @@ class WebSocketHandler
             'event' => 'doppar:subscription_succeeded',
             'channel' => $channel,
         ]);
-
-        Log::info("Client {$connectionId} subscribed to public channel: {$channel}");
     }
 
     /**
@@ -534,7 +492,6 @@ class WebSocketHandler
             $lastHeartbeat = $this->clientMetadata[$clientId]['last_heartbeat'] ?? 0;
 
             if ($now - $lastHeartbeat > $timeout) {
-                Log::info("Closing stale connection: {$clientId}");
                 $client->close();
             }
         }

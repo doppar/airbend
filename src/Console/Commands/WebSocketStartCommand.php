@@ -12,7 +12,7 @@ class WebSocketStartCommand extends Command
      *
      * @var string
      */
-    protected $name = 'websocket:start 
+    protected $name = 'websocket:start
                       {--host=127.0.0.1 : The host to bind the WebSocket server}
                       {--port=6001 : The port to bind the WebSocket server}
                       {--ssl : Enable SSL/TLS for secure connections}';

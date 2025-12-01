@@ -67,12 +67,7 @@ class RedisSubscriber
         try {
             $this->handleRedisConnection();
             $this->redis->ping();
-
-            Log::info("Redis subscriber connected successfully");
-
             $this->startPolling();
-
-            Log::info("Redis subscriber initialized and polling started on channel: {$this->pubsubChannel}");
         } catch (\Exception $e) {
             Log::error("Failed to initialize Redis subscriber: " . $e->getMessage());
             Log::error("Stack trace: " . $e->getTraceAsString());
@@ -90,8 +85,6 @@ class RedisSubscriber
         $this->timerId = Timer::add($this->pollInterval, function () {
             $this->pollMessages();
         });
-
-        Log::debug("Redis polling started with interval: {$this->pollInterval}s");
     }
 
     /**
@@ -105,10 +98,6 @@ class RedisSubscriber
             $message = $this->redis->rpop($this->pubsubChannel);
 
             if ($message) {
-                Log::debug("📨 Message received from Redis", [
-                    'queue' => $this->pubsubChannel,
-                    'message_length' => strlen($message),
-                ]);
                 $this->processMessage($message);
             }
         } catch (\Exception $e) {
@@ -126,8 +115,6 @@ class RedisSubscriber
     protected function processMessage(string $message): void
     {
         try {
-            Log::debug("Processing message", ['raw' => substr($message, 0, 200)]);
-
             $data = json_decode($message, true);
 
             if (!$data || !isset($data['event'], $data['channel'])) {
@@ -140,19 +127,9 @@ class RedisSubscriber
             $eventData = $data['data'] ?? [];
             $exceptSocketId = $data['socket_id'] ?? null;
 
-            Log::debug("📡 Broadcasting to WebSocket clients", [
-                'channel' => $channel,
-                'event' => $event,
-                'subscriber_count' => $this->handler->getChannelSubscriberCount($channel),
-            ]);
-
             $exceptConnectionId = null;
             if ($exceptSocketId) {
                 $exceptConnectionId = $this->findConnectionIdBySocketId($exceptSocketId);
-                Log::debug("Excluding socket", [
-                    'socket_id' => $exceptSocketId,
-                    'connection_id' => $exceptConnectionId,
-                ]);
             }
 
             // Broadcast to the channel
@@ -161,12 +138,6 @@ class RedisSubscriber
                 'channel' => $channel,
                 'data' => is_string($eventData) ? $eventData : json_encode($eventData),
             ], $exceptConnectionId);
-
-            Log::debug("Broadcast message sent", [
-                'event' => $event,
-                'channel' => $channel,
-                'except_socket' => $exceptSocketId,
-            ]);
         } catch (\Exception $e) {
             Log::error("Error processing broadcast message: " . $e->getMessage(), [
                 'message' => substr($message, 0, 500),
@@ -200,13 +171,9 @@ class RedisSubscriber
     protected function reconnect(): void
     {
         try {
-            Log::warning("Attempting to reconnect to Redis...");
-
             $this->handleRedisConnection();
 
             $this->redis->ping();
-
-            Log::info("Successfully reconnected to Redis");
         } catch (\Exception $e) {
             Log::error("Failed to reconnect to Redis: " . $e->getMessage());
         }
@@ -222,13 +189,11 @@ class RedisSubscriber
         if ($this->timerId !== null) {
             Timer::del($this->timerId);
             $this->timerId = null;
-            Log::info("Redis polling stopped");
         }
 
         if ($this->redis) {
             try {
                 $this->redis->disconnect();
-                Log::info("Disconnected from Redis");
             } catch (\Exception $e) {
                 Log::error("Error disconnecting from Redis: " . $e->getMessage());
             }
