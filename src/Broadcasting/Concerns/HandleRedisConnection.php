@@ -34,19 +34,9 @@ trait HandleRedisConnection
             if ($result !== 'PONG') {
                 throw RedisConnectionException::connectionFailed('Redis ping failed: expected PONG, got ' . var_export($result, true));
             }
-
-            Log::info('Redis connection established successfully', [
-                'host' => $config['host'] ?? 'unknown',
-                'port' => $config['port'] ?? 'unknown',
-                'database' => $config['database'] ?? 0,
-            ]);
         } catch (RedisConnectionException $e) {
             throw $e;
         } catch (\Exception $e) {
-            Log::error('Failed to connect to Redis', [
-                'error' => $e->getMessage(),
-                'config' => $this->sanitizeConfig($config ?? []),
-            ]);
             throw RedisConnectionException::connectionFailed($e->getMessage(), $e);
         }
     }

@@ -111,7 +111,6 @@ class WebSocketServer
 
         if ($this->ssl) {
             $worker->transport = 'ssl';
-            Log::info('SSL/TLS enabled for WebSocket server');
         }
 
         $handler = $this->handler;
@@ -133,14 +132,10 @@ class WebSocketServer
         };
 
         $worker->onWorkerStart = function () use ($handler) {
-            Log::info('WebSocket worker started, initializing Redis subscriber...');
-
             try {
                 // Create and initialize Redis subscriber in worker context
                 $this->redisSubscriber = new RedisSubscriber($handler);
                 $this->redisSubscriber->initialize();
-
-                Log::info('Redis subscriber successfully initialized');
             } catch (\Exception $e) {
                 Log::error('Failed to initialize Redis subscriber: ' . $e->getMessage());
                 Log::error('Stack trace: ' . $e->getTraceAsString());
@@ -149,9 +144,6 @@ class WebSocketServer
             // Setup periodic tasks
             $this->setupPeriodicTasks($handler);
         };
-
-        Log::info("WebSocket server starting on ws://{$this->host}:{$this->port}");
-        Log::info('Waiting for connections...');
 
         Worker::runAll();
     }
@@ -168,7 +160,6 @@ class WebSocketServer
         $heartbeatInterval = ConfigurationManager::get('websocket.heartbeat_interval', 30);
         Timer::add($heartbeatInterval, function () use ($handler) {
             $handler->sendHeartbeat();
-            Log::debug('Heartbeat sent to all connected clients');
         });
 
         // Clean up stale connections every 60 seconds
@@ -177,9 +168,9 @@ class WebSocketServer
         });
 
         // Log statistics every 5 minutes (300 seconds)
-        Timer::add(300, function () use ($handler) {
-            $this->logStatistics($handler);
-        });
+        // Timer::add(300, function () use ($handler) {
+        //     $this->logStatistics($handler);
+        // });
 
         // Memory usage monitoring every 60 seconds
         Timer::add(60, function () {
@@ -193,8 +184,6 @@ class WebSocketServer
                 ]);
             }
         });
-
-        Log::info('✓ Periodic tasks configured');
     }
 
     /**

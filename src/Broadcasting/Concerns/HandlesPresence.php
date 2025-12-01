@@ -3,7 +3,6 @@
 namespace Doppar\Airbend\Broadcasting\Concerns;
 
 use Workerman\Connection\TcpConnection;
-use Phaseolies\Support\Facades\Log;
 
 trait HandlesPresence
 {
@@ -21,16 +20,12 @@ trait HandlesPresence
 
         if (!$userData) {
             $this->sendError($conn, 'Authentication failed for presence channel');
-            Log::warning("Presence channel auth failed for {$channel}", [
-                'connection_id' => $conn->id
-            ]);
             return;
         }
 
         // Initialize presence channel if needed
         if (!isset($this->presenceChannels[$channel])) {
             $this->presenceChannels[$channel] = [];
-            Log::info("Presence channel created: {$channel}");
         }
 
         $userId = $userData['user_id'];
@@ -83,20 +78,6 @@ trait HandlesPresence
                 'channel' => $channel,
                 'data' => json_encode($memberData),
             ], $conn->id);
-
-            Log::info("New member joined presence channel", [
-                'channel' => $channel,
-                'user_id' => $userId,
-                'connection_id' => $conn->id,
-                'total_members' => count($this->presenceChannels[$channel])
-            ]);
-        } else {
-            Log::info("Existing member reconnected to presence channel", [
-                'channel' => $channel,
-                'user_id' => $userId,
-                'connection_id' => $conn->id,
-                'connections' => count($this->presenceChannels[$channel][$userId]['connections'])
-            ]);
         }
     }
 
@@ -136,18 +117,11 @@ trait HandlesPresence
                     'user_id' => $userId,
                 ]),
             ]);
-
-            Log::info("Member left presence channel", [
-                'channel' => $channel,
-                'user_id' => $userId,
-                'remaining_members' => count($this->presenceChannels[$channel])
-            ]);
         }
 
         // Clean up empty presence channels
         if (empty($this->presenceChannels[$channel])) {
             unset($this->presenceChannels[$channel]);
-            Log::info("Presence channel removed (no members): {$channel}");
         }
     }
 
@@ -264,11 +238,6 @@ trait HandlesPresence
                 'user_id' => $userId,
                 'user_info' => $this->presenceChannels[$channel][$userId]['info'],
             ]),
-        ]);
-
-        Log::info("Member info updated in presence channel", [
-            'channel' => $channel,
-            'user_id' => $userId
         ]);
     }
 

@@ -2,7 +2,6 @@
 
 namespace Doppar\Airbend\Broadcasting\Drivers;
 
-use Phaseolies\Support\Facades\Log;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
 use Doppar\Airbend\Broadcasting\Concerns\HandleRedisConnection;
@@ -42,11 +41,6 @@ class WebSocketDriver implements BroadcastDriver
         }
 
         $this->pubsubChannel = ConfigurationManager::get('websocket.channel', 'doppar-broadcast');
-
-        Log::debug('WebSocketDriver initialized', [
-            'channel' => $this->pubsubChannel,
-            'redis_connected' => $this->redis !== null,
-        ]);
     }
 
     /**
@@ -61,10 +55,6 @@ class WebSocketDriver implements BroadcastDriver
     public function broadcast(string $channel, BroadcastEvent $event, array $options = []): void
     {
         if (!$event->shouldBroadcast()) {
-            Log::debug('Event should not broadcast, skipping', [
-                'event' => get_class($event),
-                'channel' => $channel,
-            ]);
             return;
         }
 
@@ -99,16 +89,6 @@ class WebSocketDriver implements BroadcastDriver
             }
 
             MetricsCollector::recordMessage('sent');
-
-            Log::debug('Event broadcast to Redis', [
-                'channel' => $channel,
-                'event' => $eventName,
-                'data_keys' => array_keys($eventData),
-                'socket_id' => $options['except'] ?? 'none',
-                'redis_key' => $this->pubsubChannel,
-                'queue_length' => $result,
-                'message_id' => $payload['message_id'],
-            ]);
         } catch (\JsonException $e) {
             MetricsCollector::recordError('broadcast');
             throw RedisConnectionException::operationFailed(
@@ -118,12 +98,6 @@ class WebSocketDriver implements BroadcastDriver
             );
         } catch (\Exception $e) {
             MetricsCollector::recordError('broadcast');
-            Log::error("WebSocket broadcast failed: {$e->getMessage()}", [
-                'channel' => $channel,
-                'event' => $eventName,
-                'error_type' => get_class($e),
-                'trace' => $e->getTraceAsString(),
-            ]);
 
             if ($e instanceof RedisConnectionException) {
                 throw $e;
@@ -162,12 +136,6 @@ class WebSocketDriver implements BroadcastDriver
                 $stringToSign = "{$socketId}:{$channel}:{$channelData}";
                 $signature = hash_hmac('sha256', $stringToSign, $appSecret);
 
-                Log::debug('Presence channel authentication', [
-                    'channel' => $channel,
-                    'socket_id' => $socketId,
-                    'user_data_keys' => $userData ? array_keys($userData) : [],
-                ]);
-
                 return [
                     'auth' => "{$appKey}:{$signature}",
                     'channel_data' => $channelData,
@@ -178,21 +146,11 @@ class WebSocketDriver implements BroadcastDriver
             $stringToSign = "{$socketId}:{$channel}";
             $signature = hash_hmac('sha256', $stringToSign, $appSecret);
 
-            Log::debug('Private channel authentication', [
-                'channel' => $channel,
-                'socket_id' => $socketId,
-            ]);
-
             return [
                 'auth' => "{$appKey}:{$signature}",
             ];
         } catch (\JsonException $e) {
             MetricsCollector::recordError('authentication');
-            Log::error('Authentication failed: JSON encoding error', [
-                'channel' => $channel,
-                'socket_id' => $socketId,
-                'error' => $e->getMessage(),
-            ]);
             throw $e;
         } finally {
             MetricsCollector::endTiming('authentication');

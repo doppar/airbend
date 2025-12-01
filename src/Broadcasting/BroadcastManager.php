@@ -103,23 +103,10 @@ class BroadcastManager
                 $this->exceptSocketId = $this->getCurrentSocketId();
             }
 
-            Log::debug('Broadcasting to channels', [
-                'channels' => $channels,
-                'event' => get_class($event),
-                'event_name' => $event->broadcastAs(),
-                'to_others' => $this->toOthers,
-                'except_socket' => $this->exceptSocketId,
-            ]);
-
             // Broadcast to each channel separately
             $successCount = 0;
             foreach ($channels as $channel) {
                 try {
-                    Log::debug('Broadcasting to channel', [
-                        'channel' => $channel,
-                        'event' => $event->broadcastAs(),
-                    ]);
-
                     $driver->broadcast($channel, $event, [
                         'except' => $this->exceptSocketId,
                         'to_others' => $this->toOthers,
@@ -134,15 +121,8 @@ class BroadcastManager
                         'event' => $event->broadcastAs(),
                         'error' => $e->getMessage(),
                     ]);
-                    // Continue with other channels
                 }
             }
-
-            Log::info('Broadcast completed', [
-                'total_channels' => count($channels),
-                'successful' => $successCount,
-                'failed' => count($channels) - $successCount,
-            ]);
         } finally {
             // Reset flags for next broadcast
             $this->reset();
@@ -243,10 +223,6 @@ class BroadcastManager
                 default => throw BroadcastConfigurationException::unsupportedDriver($config['driver'] ?? $driver),
             };
         } catch (BroadcastConfigurationException $e) {
-            Log::error('Failed to create broadcasting driver', [
-                'driver' => $driver,
-                'error' => $e->getMessage(),
-            ]);
             throw $e;
         }
     }
