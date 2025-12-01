@@ -1,5 +1,5 @@
 /**
- * Doppar.js - WebSocket Broadcasting Client
+ * Airbender.js - WebSocket Broadcasting Client
  *
  * A powerful, WebSocket client for Doppar framework
  * Supports public, private, and presence channels with automatic reconnection
@@ -8,7 +8,7 @@
  * @author Mahedi Hasan
  */
 
-class Doppar {
+class Airbender {
     constructor(options = {}) {
         this.options = {
             host: options.host || "ws://127.0.0.1:6001",
@@ -95,7 +95,7 @@ class Doppar {
                 break;
 
             case "doppar:subscription_succeeded":
-                this.handleSubscriptionSucceeded(channel);
+                this.handleSubscriptionSucceeded(channel, JSON.parse(data));
                 break;
 
             case "doppar:member_added":
@@ -153,11 +153,11 @@ class Doppar {
     /**
      * Handle subscription succeeded
      */
-    handleSubscriptionSucceeded(channelName) {
+    handleSubscriptionSucceeded(channelName, payload) {
         const channel = this.channels.get(channelName);
         if (channel) {
             channel.subscribed = true;
-            channel.trigger("subscribed");
+            channel.trigger("subscribed", payload);
         }
     }
 
@@ -180,7 +180,10 @@ class Doppar {
     handleMemberAdded(channelName, data) {
         const channel = this.channels.get(channelName);
         if (channel && channel.type === "presence") {
-            channel.members.push(data);
+            if (!channel.members.find((m) => m.user_id === data.user_id)) {
+                channel.members.push(data);
+            }
+
             channel.trigger("member-added", data);
         }
     }
@@ -206,7 +209,7 @@ class Doppar {
             return this.channels.get(channelName);
         }
 
-        const channel = new DopparChannel(this, channelName, "public");
+        const channel = new AirbenderChannel(this, channelName, "public");
         this.channels.set(channelName, channel);
         channel.subscribe();
 
@@ -225,7 +228,7 @@ class Doppar {
             return this.channels.get(fullName);
         }
 
-        const channel = new DopparPrivateChannel(this, fullName);
+        const channel = new AirbenderPrivateChannel(this, fullName);
         this.channels.set(fullName, channel);
         channel.subscribe();
 
@@ -244,7 +247,7 @@ class Doppar {
             return this.channels.get(fullName);
         }
 
-        const channel = new DopparPresenceChannel(this, fullName);
+        const channel = new AirbenderPresenceChannel(this, fullName);
         this.channels.set(fullName, channel);
         channel.subscribe();
 
@@ -266,7 +269,7 @@ class Doppar {
      * Send message to server
      */
     send(message) {
-        if (this.isConnected && this.socket.readyState === WebSocket.OPEN) {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.send(JSON.stringify(message));
         } else {
             this.messageQueue.push(message);
@@ -278,15 +281,25 @@ class Doppar {
      */
     processMessageQueue() {
         while (this.messageQueue.length > 0) {
-            const message = this.messageQueue.shift();
-            this.send(message);
+            const queue = [...this.messageQueue];
+            this.messageQueue = [];
+            queue.forEach((msg) => this.send(msg));
         }
+    }
+
+    cleanup() {
+        if (!this.socket) return;
+        this.socket.onopen = null;
+        this.socket.onmessage = null;
+        this.socket.onerror = null;
+        this.socket.onclose = null;
     }
 
     /**
      * Reconnect to server
      */
     reconnect() {
+        this.cleanup();
         this.reconnectCount++;
 
         setTimeout(() => {
@@ -334,7 +347,7 @@ class Doppar {
 /**
  * Base Channel Class
  */
-class DopparChannel {
+class AirbenderChannel {
     constructor(doppar, name, type = "public") {
         this.doppar = doppar;
         this.name = name;
@@ -359,10 +372,8 @@ class DopparChannel {
      * Resubscribe to channel (after reconnection)
      */
     resubscribe() {
-        if (this.subscribed) {
-            this.subscribed = false;
-            this.subscribe();
-        }
+        this.subscribed = false;
+        this.subscribe();
     }
 
     /**
@@ -415,7 +426,7 @@ class DopparChannel {
 /**
  * Private Channel Class
  */
-class DopparPrivateChannel extends DopparChannel {
+class AirbenderPrivateChannel extends AirbenderChannel {
     constructor(doppar, name) {
         super(doppar, name, "private");
     }
@@ -484,7 +495,7 @@ class DopparPrivateChannel extends DopparChannel {
 /**
  * Presence Channel Class
  */
-class DopparPresenceChannel extends DopparPrivateChannel {
+class AirbenderPresenceChannel extends AirbenderPrivateChannel {
     constructor(doppar, name) {
         super(doppar, name);
         this.type = "presence";
@@ -509,11 +520,11 @@ class DopparPresenceChannel extends DopparPrivateChannel {
      * Get here (current members)
      */
     here(callback) {
-        return this.listen("subscribed", (data) => {
-            if (data && data.presence) {
-                callback(this.members);
-            }
-        });
+        if (this.subscribed && this.members.length > 0) {
+            callback(this.members);
+        }
+
+        return super.listen("subscribed", () => callback(this.members));
     }
 
     /**
@@ -533,8 +544,8 @@ class DopparPresenceChannel extends DopparPrivateChannel {
 
 // Export for use in different environments
 if (typeof module !== "undefined" && module.exports) {
-    module.exports = Doppar;
+    module.exports = Airbender;
 }
 if (typeof window !== "undefined") {
-    window.Doppar = Doppar;
+    window.Airbender = Airbender;
 }
