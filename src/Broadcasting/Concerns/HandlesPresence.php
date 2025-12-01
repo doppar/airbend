@@ -3,7 +3,6 @@
 namespace Doppar\Airbend\Broadcasting\Concerns;
 
 use Workerman\Connection\TcpConnection;
-use Phaseolies\Support\Facades\Log;
 
 trait HandlesPresence
 {
@@ -21,16 +20,12 @@ trait HandlesPresence
 
         if (!$userData) {
             $this->sendError($conn, 'Authentication failed for presence channel');
-            Log::warning("Presence channel auth failed for {$channel}", [
-                'connection_id' => $conn->id
-            ]);
             return;
         }
 
         // Initialize presence channel if needed
         if (!isset($this->presenceChannels[$channel])) {
             $this->presenceChannels[$channel] = [];
-            Log::info("Presence channel created: {$channel}");
         }
 
         $userId = $userData['user_id'];
