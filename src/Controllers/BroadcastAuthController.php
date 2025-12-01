@@ -2,14 +2,12 @@
 
 namespace Doppar\Airbend\Controllers;
 
-use Phaseolies\Utilities\Attributes\Middleware;
 use Phaseolies\Http\Request;
 use Doppar\Airbend\Support\Facades\Broadcast;
 use Doppar\Airbend\Broadcasting\Channel;
 use App\Http\Controllers\Controller;
 use Phaseolies\Http\Response\JsonResponse;
 
-#[Middleware('auth')]
 class BroadcastAuthController extends Controller
 {
     /**

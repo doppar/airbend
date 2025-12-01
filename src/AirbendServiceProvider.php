@@ -42,6 +42,10 @@ class AirbendServiceProvider extends ServiceProvider
             __DIR__ . '/../assets' => public_path('vendor/airbend/assets'),
         ], 'public');
 
+        $this->publishes([
+            __DIR__ . '/../routes/channels.php' => base_path('routes/channels.php'),
+        ], 'views');
+
         $this->commands([
             WebSocketStartCommand::class,
             MakeEventCommand::class
@@ -58,7 +62,5 @@ class AirbendServiceProvider extends ServiceProvider
         $this->app->singleton('broadcast', function ($app) {
             return new BroadcastManager();
         });
-
-        $this->app->alias('broadcast', BroadcastManager::class);
     }
 }
