@@ -40,9 +40,6 @@ class Doppar {
         const protocol = this.options.encrypted ? "wss" : "ws";
         const host = this.options.host.replace(/^(ws|wss):\/\//, "");
         const url = `${protocol}://${host}`;
-
-        console.log(`[Doppar] Connecting to ${url}...`);
-
         this.socket = new WebSocket(url);
         this.setupEventHandlers();
     }
@@ -52,7 +49,6 @@ class Doppar {
      */
     setupEventHandlers() {
         this.socket.onopen = () => {
-            console.log("[Doppar] Connection established");
             this.isConnected = true;
             this.reconnectCount = 0;
 
@@ -73,7 +69,6 @@ class Doppar {
         };
 
         this.socket.onclose = () => {
-            console.log("[Doppar] Connection closed");
             this.isConnected = false;
             this.socketId = null;
             this.trigger("disconnected");
@@ -142,8 +137,6 @@ class Doppar {
         this.socketId = data.socket_id;
         this.isReady = true;
 
-        console.log(`[Doppar] Socket ID: ${this.socketId}`);
-
         // Trigger new "ready" event
         this.trigger("ready", this.socketId);
 
@@ -165,7 +158,6 @@ class Doppar {
         if (channel) {
             channel.subscribed = true;
             channel.trigger("subscribed");
-            console.log(`[Doppar] Subscribed to ${channelName}`);
         }
     }
 
@@ -296,9 +288,6 @@ class Doppar {
      */
     reconnect() {
         this.reconnectCount++;
-        console.log(
-            `[Doppar] Reconnecting (${this.reconnectCount}/${this.options.reconnectAttempts})...`
-        );
 
         setTimeout(() => {
             this.connect();
