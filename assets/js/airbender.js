@@ -60,7 +60,16 @@ class Airbender {
         };
 
         this.socket.onmessage = (event) => {
-            this.handleMessage(JSON.parse(event.data));
+            let parsed;
+
+            try {
+                parsed = JSON.parse(event.data);
+            } catch (e) {
+                console.error("[Doppar] Invalid JSON from server:", event.data);
+                return;
+            }
+
+            this.handleMessage(parsed);
         };
 
         this.socket.onerror = (error) => {
@@ -270,7 +279,11 @@ class Airbender {
      */
     send(message) {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify(message));
+           try {
+               this.socket.send(JSON.stringify(message));
+           } catch (e) {
+               this.messageQueue.push(message);
+           }
         } else {
             this.messageQueue.push(message);
         }
