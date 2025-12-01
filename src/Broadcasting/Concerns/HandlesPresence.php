@@ -83,13 +83,6 @@ trait HandlesPresence
                 'channel' => $channel,
                 'data' => json_encode($memberData),
             ], $conn->id);
-
-            Log::info("New member joined presence channel", [
-                'channel' => $channel,
-                'user_id' => $userId,
-                'connection_id' => $conn->id,
-                'total_members' => count($this->presenceChannels[$channel])
-            ]);
         }
     }
 
