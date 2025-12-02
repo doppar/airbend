@@ -15,7 +15,8 @@
     },
     "require-dev": {
         "mockery/mockery": "^1.6",
-        "phpunit/phpunit": "^12.1.5"
+        "phpunit/phpunit": "^12.1.5",
+        "doppar/framework": "^3.0"
     },
     "autoload": {
         "psr-4": {
@@ -24,6 +25,11 @@
         "files": [
             "src/Helpers/broadcast.php"
         ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Doppar\\Airbend\\Tests\\": "tests/"
+        }
     },
     "extra": {
         "branch-alias": {
