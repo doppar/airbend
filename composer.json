@@ -25,6 +25,11 @@
             "src/Helpers/broadcast.php"
         ]
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Doppar\\Airbend\\Tests\\": "tests/"
+        }
+    },
     "extra": {
         "branch-alias": {
             "dev-master": "1.x-dev"
