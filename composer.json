@@ -1,6 +1,6 @@
 {
     "name": "doppar/airbend",
-    "description": "Doppar Bloom is a high-performance package for probabilistic",
+    "description": "Doppar Airbend is a real-time broadcasting component of the Doppar PHP Frameworkc",
     "type": "library",
     "license": "MIT",
     "authors": [
