@@ -31,9 +31,9 @@ class WebSocketStartCommand extends Command
      */
     protected function handle(): int
     {
-        $host = $this->option('host') ?? config('airbend.connections.websocket.host', '127.0.0.1');
-        $port = $this->option('port') ?? config('airbend.connections.websocket.port', 6001);
-        $ssl = $this->option('ssl') ?? config('airbend.connections.websocket.ssl', false);
+        $host = $this->option('host');
+        $port = $this->option('port');
+        $ssl = $this->option('ssl');
 
         $this->displayInfo("Starting Doppar WebSocket Server...");
         $this->newLine();

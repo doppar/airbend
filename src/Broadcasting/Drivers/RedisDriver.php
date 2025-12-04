@@ -9,7 +9,7 @@ use Doppar\Airbend\Configuration\ConfigurationManager;
 use Doppar\Airbend\Exceptions\RedisConnectionException;
 use Doppar\Airbend\Monitoring\MetricsCollector;
 
-class WebSocketDriver implements BroadcastDriver
+class RedisDriver implements BroadcastDriver
 {
     use HandleRedisConnection;
 
@@ -40,7 +40,7 @@ class WebSocketDriver implements BroadcastDriver
             throw RedisConnectionException::connectionFailed($e->getMessage(), $e);
         }
 
-        $this->pubsubChannel = ConfigurationManager::get('websocket.channel', 'doppar-broadcast');
+        $this->pubsubChannel = ConfigurationManager::get('connections.redis.broadcast_channel');
     }
 
     /**

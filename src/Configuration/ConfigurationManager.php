@@ -195,7 +195,7 @@ class ConfigurationManager
      */
     public static function getRedisConfig(): array
     {
-        return static::get('connections.websocket.redis', []);
+        return static::get('connections.redis', []);
     }
 
     /**

@@ -73,7 +73,7 @@ class WebSocketHandler
     public function onOpen(TcpConnection $conn): void
     {
         try {
-            $maxConnections = ConfigurationManager::get('connections.websocket.max_connections', 1000);
+            $maxConnections = ConfigurationManager::get('websocket.max_connections', 1000);
             if ($this->clients->count() >= $maxConnections) {
                 $conn->close();
                 MetricsCollector::recordConnection('failed');
@@ -95,7 +95,7 @@ class WebSocketHandler
             ];
 
             // Send connection established event
-            $connectionTimeout = ConfigurationManager::get('connections.websocket.connection_timeout', 180);
+            $connectionTimeout = ConfigurationManager::get('websocket.connection_timeout', 180);
             $this->sendToClient($conn, [
                 'event' => 'doppar:connection_established',
                 'data' => json_encode([

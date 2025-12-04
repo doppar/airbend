@@ -157,7 +157,7 @@ class WebSocketServer
     protected function setupPeriodicTasks(WebSocketHandler $handler): void
     {
         // Heartbeat every 30 seconds
-        $heartbeatInterval = ConfigurationManager::get('connections.websocket.heartbeat_interval', 30);
+        $heartbeatInterval = ConfigurationManager::get('websocket.heartbeat_interval', 30);
         Timer::add($heartbeatInterval, function () use ($handler) {
             $handler->sendHeartbeat();
         });

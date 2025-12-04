@@ -11,11 +11,11 @@ return [
     | framework when an event needs to be broadcast. You may set this to
     | any of the connections defined in the "connections" array below.
     |
-    | Supported: "websocket", "null"
+    | Supported: "redis", "null"
     |
     */
 
-    'default' => env('BROADCAST_DRIVER', 'websocket'),
+    'default' => env('BROADCAST_DRIVER', 'redis'),
 
     /*
     |--------------------------------------------------------------------------
@@ -30,26 +30,47 @@ return [
     */
 
     'connections' => [
-        'websocket' => [
-            'host' => env('WEBSOCKET_HOST', '127.0.0.1'),
-            'port' => (int) env('WEBSOCKET_PORT', 6001),
-            'ssl' => (bool) env('WEBSOCKET_SSL', false),
-            'max_connections' => (int) env('WEBSOCKET_MAX_CONNECTIONS', 1000),
-            'connection_timeout' => (int) env('WEBSOCKET_CONNECTION_TIMEOUT', 180),
-            'heartbeat_interval' => (int) env('WEBSOCKET_HEARTBEAT_INTERVAL', 30),
-            'redis_poll_interval' => (float) env('WEBSOCKET_REDIS_POLL_INTERVAL', 0.1),
-            'broadcast_channel' => env('WEBSOCKET_CHANNEL', 'doppar-broadcast'),
-            'redis' => [
-                'connection' => env('REDIS_URL', 'redis://127.0.0.1:6379'),
-                'prefix' => env('REDIS_PREFIX', ''),
-                'options' => [
-                    'parameters' => [
-                        'password' => env('REDIS_PASSWORD') ?: null,
-                        'database' => env('REDIS_DB') ? (int)env('REDIS_DB') : 0,
-                    ],
+        'redis' => [
+            'connection' => env('REDIS_URL', 'redis://127.0.0.1:6379'),
+            'prefix' => env('REDIS_PREFIX', ''),
+            'options' => [
+                'parameters' => [
+                    'password' => env('REDIS_PASSWORD') ?: null,
+                    'database' => env('REDIS_DB') ? (int) env('REDIS_DB') : 0,
                 ],
             ],
+            'redis_poll_interval' => (float) env('REDIS_POLL_INTERVAL', 0.1),
+            'broadcast_channel' => env('WEBSOCKET_CHANNEL', 'doppar-broadcast'),
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Server Configuration
+    |--------------------------------------------------------------------------
+    |
+    | These options control the behavior of the Workerman WebSocket server.
+    | You can adjust them based on your application's performance needs.
+    |
+    | max_connections:
+    |   The maximum number of simultaneous WebSocket clients that the server
+    |   can handle. Increase this value if your application expects more users.
+    |
+    | connection_timeout:
+    |   The number of seconds a connection can remain idle before Workerman
+    |   automatically closes it. This helps free resources from inactive clients.
+    |
+    | heartbeat_interval:
+    |   The interval (in seconds) at which Workerman will send automatic
+    |   heartbeat (ping) messages to connected clients to ensure that they
+    |   are still active and to keep the connection alive.
+    |
+    */
+
+    'websocket' => [
+        'max_connections' => (int) env('WEBSOCKET_MAX_CONNECTIONS', 1000),
+        'connection_timeout' => (int) env('WEBSOCKET_CONNECTION_TIMEOUT', 180),
+        'heartbeat_interval' => (int) env('WEBSOCKET_HEARTBEAT_INTERVAL', 30),
     ],
 
     /*
@@ -63,11 +84,10 @@ return [
     */
 
     'authorize' => [
-        'app_key' => env('WEBSOCKET_APP_KEY', 'doppar-app-key'),
+        'app_key' => env('APP_KEY', 'doppar-app-key'),
         'app_secret' => env('WEBSOCKET_APP_SECRET', 'doppar-app-secret'),
         'endpoint' => '/broadcasting/auth',
         'middleware' => ['auth'],
         'enabled' => true
-    ],
-
+    ]
 ];
