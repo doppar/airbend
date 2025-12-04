@@ -2,8 +2,7 @@
 
 namespace Doppar\Airbend\Broadcasting;
 
-use Doppar\Airbend\Broadcasting\Concerns\HandleRedisConnection;
-use Doppar\Airbend\Broadcasting\Drivers\WebSocketDriver;
+use Doppar\Airbend\Broadcasting\Drivers\RedisDriver;
 use Doppar\Airbend\Broadcasting\Drivers\NullDriver;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
@@ -14,8 +13,6 @@ use Phaseolies\Support\Facades\Log;
 
 class BroadcastManager
 {
-    use HandleRedisConnection;
-
     /**
      * Broadcasting drivers
      *
@@ -218,23 +215,13 @@ class BroadcastManager
             $config = ConfigurationManager::getDriverConfig($driver);
 
             return match ($config['driver'] ?? $driver) {
-                'websocket' => $this->createWebSocketDriver(),
+                'redis' => new RedisDriver(),
                 'null' => new NullDriver(),
                 default => throw BroadcastConfigurationException::unsupportedDriver($config['driver'] ?? $driver),
             };
         } catch (BroadcastConfigurationException $e) {
             throw $e;
         }
-    }
-
-    /**
-     * Create WebSocket driver instance
-     *
-     * @return WebSocketDriver
-     */
-    protected function createWebSocketDriver(): WebSocketDriver
-    {
-        return new WebSocketDriver();
     }
 
     /**
