@@ -127,8 +127,8 @@ class WebSocketDriver implements BroadcastDriver
         MetricsCollector::startTiming();
 
         try {
-            $appKey = ConfigurationManager::get('websocket.app_key', 'doppar-app-key');
-            $appSecret = ConfigurationManager::get('websocket.app_secret', 'doppar-app-secret');
+            $appKey = ConfigurationManager::get('authorize.app_key', 'doppar-app-key');
+            $appSecret = ConfigurationManager::get('authorize.app_secret', 'doppar-app-secret');
 
             if (str_starts_with($channel, 'presence-')) {
                 // Presence channel authentication
