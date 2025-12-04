@@ -30,17 +30,16 @@ return [
     */
 
     'connections' => [
-
         'websocket' => [
-            'driver' => 'websocket',
             'host' => env('WEBSOCKET_HOST', '127.0.0.1'),
-            'port' => env('WEBSOCKET_PORT', 6001),
-            'ssl' => env('WEBSOCKET_SSL', false),
-            'ssl_cert' => env('WEBSOCKET_SSL_CERT'),
-            'ssl_key' => env('WEBSOCKET_SSL_KEY'),
-            'allow_self_signed' => env('WEBSOCKET_ALLOW_SELF_SIGNED', false),
+            'port' => (int) env('WEBSOCKET_PORT', 6001),
+            'ssl' => (bool) env('WEBSOCKET_SSL', false),
+            'max_connections' => (int) env('WEBSOCKET_MAX_CONNECTIONS', 1000),
+            'connection_timeout' => (int) env('WEBSOCKET_CONNECTION_TIMEOUT', 180),
+            'heartbeat_interval' => (int) env('WEBSOCKET_HEARTBEAT_INTERVAL', 30),
+            'redis_poll_interval' => (float) env('WEBSOCKET_REDIS_POLL_INTERVAL', 0.1),
+            'broadcast_channel' => env('WEBSOCKET_CHANNEL', 'doppar-broadcast'),
             'redis' => [
-                'driver' => 'redis',
                 'connection' => env('REDIS_URL', 'redis://127.0.0.1:6379'),
                 'prefix' => env('REDIS_PREFIX', ''),
                 'options' => [
@@ -50,53 +49,6 @@ return [
                     ],
                 ],
             ],
-        ],
-
-        'null' => [
-            'driver' => 'null',
-        ],
-
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | WebSocket Server Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Here you may define settings specific to the WebSocket broadcasting server.
-    | This includes host, port, SSL, authentication, channels, and performance settings.
-    |
-    | Note: You can customize max connections, heartbeat intervals, and allowed origins.
-    |
-    */
-
-    'websocket' => [
-        // Server Configuration
-        'host' => env('WEBSOCKET_HOST', '127.0.0.1'),
-        'port' => (int) env('WEBSOCKET_PORT', 6001),
-        'ssl' => (bool) env('WEBSOCKET_SSL', false),
-        'ssl_cert' => env('WEBSOCKET_SSL_CERT'),
-        'ssl_key' => env('WEBSOCKET_SSL_KEY'),
-        'allow_self_signed' => (bool) env('WEBSOCKET_ALLOW_SELF_SIGNED', false),
-
-        // Authentication
-        'app_key' => env('WEBSOCKET_APP_KEY', 'doppar-app-key'),
-        'app_secret' => env('WEBSOCKET_APP_SECRET', 'doppar-app-secret'),
-
-        // Broadcasting Channel
-        'channel' => env('WEBSOCKET_CHANNEL', 'doppar-broadcast'),
-
-        // Connection Management
-        'max_connections' => (int) env('WEBSOCKET_MAX_CONNECTIONS', 1000),
-        'connection_timeout' => (int) env('WEBSOCKET_CONNECTION_TIMEOUT', 180),
-
-        // Performance Settings
-        'heartbeat_interval' => (int) env('WEBSOCKET_HEARTBEAT_INTERVAL', 30),
-        'redis_poll_interval' => (float) env('WEBSOCKET_REDIS_POLL_INTERVAL', 0.1),
-
-        // Security
-        'allowed_origins' => [
-            env('WEBSOCKET_ALLOWED_ORIGINS', '*'),
         ],
     ],
 
@@ -111,9 +63,11 @@ return [
     */
 
     'authorize' => [
-        'endpoint' => '/airbend/auth',
+        'app_key' => env('WEBSOCKET_APP_KEY', 'doppar-app-key'),
+        'app_secret' => env('WEBSOCKET_APP_SECRET', 'doppar-app-secret'),
+        'endpoint' => '/broadcasting/auth',
         'middleware' => ['auth'],
-        'enabled' => true,
+        'enabled' => true
     ],
 
 ];

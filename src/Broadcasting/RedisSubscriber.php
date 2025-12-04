@@ -53,8 +53,8 @@ class RedisSubscriber
     public function __construct(WebSocketHandler $handler)
     {
         $this->handler = $handler;
-        $this->pubsubChannel = config('airbend.websocket.channel', 'doppar-broadcast');
-        $this->pollInterval = (float) config('airbend.websocket.redis_poll_interval', 0.1);
+        $this->pubsubChannel = config('airbend.connections.websocket.broadcast_channel');
+        $this->pollInterval = (float) config('airbend.connections.websocket.redis_poll_interval');
     }
 
     /**

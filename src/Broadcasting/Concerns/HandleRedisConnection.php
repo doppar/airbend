@@ -3,14 +3,13 @@
 namespace Doppar\Airbend\Broadcasting\Concerns;
 
 use Predis\Client;
-use Phaseolies\Support\Facades\Log;
 use Doppar\Airbend\Configuration\ConfigurationManager;
 use Doppar\Airbend\Exceptions\RedisConnectionException;
 
 trait HandleRedisConnection
 {
     /**
-     * Connect to Redis
+     * Initialize Redis connection
      *
      * @return void
      * @throws RedisConnectionException
@@ -18,85 +17,89 @@ trait HandleRedisConnection
     protected function handleRedisConnection(): void
     {
         try {
-            $config = $this->getConnectionConfig();
+            $config  = $this->getConnectionConfig();
             $options = $this->getConnectionOptions();
 
             $this->redis = new Client($config, $options);
 
-            // Test the connection
             $result = $this->redis->ping();
 
-            // Predis may return different types: string 'PONG' or Status object
             if (is_object($result)) {
                 $result = (string) $result;
             }
 
             if ($result !== 'PONG') {
-                throw RedisConnectionException::connectionFailed('Redis ping failed: expected PONG, got ' . var_export($result, true));
+                throw RedisConnectionException::connectionFailed(
+                    "Redis ping failed: expected PONG, got " . var_export($result, true)
+                );
             }
-        } catch (RedisConnectionException $e) {
-            throw $e;
         } catch (\Exception $e) {
             throw RedisConnectionException::connectionFailed($e->getMessage(), $e);
         }
     }
 
     /**
-     * Get connection config
+     * Build connection config
      *
-     * @return array<string, mixed>
+     * @return array
      */
     protected function getConnectionConfig(): array
     {
         $redisConfig = ConfigurationManager::getRedisConfig();
-        $connection = $redisConfig['connection'] ?? 'tcp://127.0.0.1:6379';
+        $connection  = $redisConfig['connection'] ?? 'redis://127.0.0.1:6379';
 
         if (is_array($connection) && isset($connection['scheme'])) {
-            return $connection;
+            return $this->normalizeScheme($connection);
         }
 
+        // URL-based
         if (is_string($connection)) {
-            return $this->parseConnectionString($connection);
+            $parsed = $this->parseConnectionString($connection);
+            return $this->normalizeScheme($parsed);
         }
 
-        return [
-            'scheme' => 'tcp',
-            'host' => '127.0.0.1',
-            'port' => 6379,
-        ];
+        // Fallback
+        return ['scheme' => 'tcp', 'host' => '127.0.0.1', 'port' => 6379];
     }
 
     /**
-     * Parse Redis connection string
+     * Parse Redis URL into Predis config array
      *
-     * @param string $connectionString
+     * @param string $url
      * @return array
      */
-    protected function parseConnectionString(string $connectionString): array
+    protected function parseConnectionString(string $url): array
     {
-        $parsed = parse_url($connectionString);
+        $parsed = parse_url($url) ?: [];
 
         $config = [
             'scheme' => $parsed['scheme'] ?? 'tcp',
-            'host' => $parsed['host'] ?? '127.0.0.1',
-            'port' => $parsed['port'] ?? 6379,
+            'host'   => $parsed['host'] ?? '127.0.0.1',
+            'port'   => $parsed['port'] ?? 6379,
         ];
 
+        // Username/password
+        if (array_key_exists('pass', $parsed)) {
+            $config['password'] = $parsed['pass'];
+        }
+
+        // Path database (/0)
         if (isset($parsed['path']) && $parsed['path'] !== '/') {
-            $config['database'] = (int) str_replace('/', '', $parsed['path']);
+            $config['database'] = (int) trim($parsed['path'], '/');
         }
 
-        if (isset($parsed['user'])) {
-            $config['password'] = $parsed['pass'] ?? null;
-        }
-
+        // Query params: database, password, prefix, etc.
         if (isset($parsed['query'])) {
             parse_str($parsed['query'], $query);
+
             if (isset($query['database'])) {
                 $config['database'] = (int) $query['database'];
             }
             if (isset($query['password'])) {
                 $config['password'] = $query['password'];
+            }
+            if (isset($query['prefix'])) {
+                $config['prefix'] = $query['prefix'];
             }
         }
 
@@ -104,54 +107,73 @@ trait HandleRedisConnection
     }
 
     /**
-     * Get connection options
+     * Normalize Redis scheme for TLS & legacy names
      *
-     * @return array<string, mixed>
+     * @param array $config
+     * @return array
+     */
+    protected function normalizeScheme(array $config): array
+    {
+        $scheme = $config['scheme'] ?? 'tcp';
+
+        if (in_array($scheme, ['rediss', 'redis+tls'], true)) {
+            $config['scheme'] = 'tls';
+        } elseif ($scheme === 'redis') {
+            $config['scheme'] = 'tcp';
+        }
+
+        return $config;
+    }
+
+    /**
+     * Build Redis client options merged with config
+     *
+     * @return array
      */
     protected function getConnectionOptions(): array
     {
-        // Use the Redis configuration attached to the websocket connection
         $redisConfig = ConfigurationManager::getRedisConfig();
-        $params = $redisConfig['options']['parameters'] ?? [];
+        $params      = $redisConfig['options']['parameters'] ?? [];
 
         $options = [
-            'prefix' => $redisConfig['prefix'] ?? '',
+            'prefix'            => $redisConfig['prefix'] ?? '',
             'read_write_timeout' => 0,
-            'persistent' => false,
-            'exceptions' => true,
+            'persistent'        => false,
+            'exceptions'        => true,
         ];
 
+        if (isset($redisConfig['prefix'])) {
+            $options['prefix'] = $redisConfig['prefix'];
+        }
+
         if (!empty($params['database'])) {
-            $options['database'] = $params['database'];
+            $options['parameters']['database'] = (int) $params['database'];
         }
 
         if (!empty($params['password'])) {
-            $options['password'] = $params['password'];
+            $options['parameters']['password'] = $params['password'];
         }
 
         return $options;
     }
 
     /**
-     * Sanitize configuration for logging (remove sensitive data)
+     * Remove sensitive entries for safe logging
      *
-     * @param array<string, mixed> $config
-     * @return array<string, mixed>
+     * @param array $config
+     * @return array
      */
     protected function sanitizeConfig(array $config): array
     {
-        $sanitized = $config;
-
-        // Remove or mask sensitive information
-        if (isset($sanitized['password'])) {
-            $sanitized['password'] = '***';
+        if (isset($config['password'])) {
+            $config['password'] = '***';
         }
 
-        return $sanitized;
+        return $config;
     }
 
     /**
-     * Get Redis client instance
+     * Get Redis client
      *
      * @return Client
      */

@@ -78,8 +78,8 @@ trait HandlesAuthentication
      */
     protected function generateAuthSignature(string $socketId, string $channel): string
     {
-        $appKey = config('airbend.websocket.app_key');
-        $appSecret = config('airbend.websocket.app_secret');
+        $appKey = config('airbend.authorize.app_key');
+        $appSecret = config('airbend.authorize.app_secret');
         $stringToSign = "{$socketId}:{$channel}";
 
         return "{$appKey}:" . hash_hmac('sha256', $stringToSign, $appSecret);
@@ -95,8 +95,8 @@ trait HandlesAuthentication
      */
     protected function generatePresenceAuthSignature(string $socketId, string $channel,  string $channelData): string
     {
-        $appKey = config('airbend.websocket.app_key');
-        $appSecret = config('airbend.websocket.app_secret');
+        $appKey = config('airbend.authorize.app_key');
+        $appSecret = config('airbend.authorize.app_secret');
         $stringToSign = "{$socketId}:{$channel}:{$channelData}";
 
         return "{$appKey}:" . hash_hmac('sha256', $stringToSign, $appSecret);
