@@ -2,11 +2,15 @@
 
 use Doppar\Airbend\Controllers\BroadcastAuthController;
 
-$router = app('route');
+if(!config('airbend.authorize.enabled')){
+    return;
+}else{
+    $router = app('route');
 
-// ======================================
-// Load the Airbend Route
-// ======================================
+    // ======================================
+    // Load the Airbend Route
+    // ======================================
+    $router->post(config('airbend.authorize.endpoint'), [BroadcastAuthController::class, 'authenticate'])
+        ->middleware(config('airbend.authorize.middleware'));
+}
 
-$router->post('broadcasting/auth', [BroadcastAuthController::class, 'authenticate'])
-    ->middleware(config('airbend.authorize.middleware'));
