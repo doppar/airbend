@@ -87,7 +87,7 @@ return [
         'app_key' => env('APP_KEY', 'doppar-app-key'),
         'app_secret' => env('WEBSOCKET_APP_SECRET', 'doppar-app-secret'),
         'endpoint' => '/broadcasting/auth',
-        'middleware' => ['auth'],
+        'middleware' => [],
         'enabled' => true
     ]
 ];

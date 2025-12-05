@@ -70,5 +70,4 @@ Channel::authorize('private-team.{teamId}', function (Request $request, int $tea
     }
 
     // Check if user belongs to the team
-    // return $user->teams()->where('id', $teamId)->exists();
 });
