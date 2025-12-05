@@ -2,11 +2,12 @@
 
 namespace Doppar\Airbend\Controllers;
 
+use Phaseolies\Support\Facades\Auth;
+use Phaseolies\Http\Response\JsonResponse;
 use Phaseolies\Http\Request;
 use Doppar\Airbend\Support\Facades\Broadcast;
 use Doppar\Airbend\Broadcasting\Channel;
 use App\Http\Controllers\Controller;
-use Phaseolies\Http\Response\JsonResponse;
 
 class BroadcastAuthController extends Controller
 {
@@ -18,6 +19,13 @@ class BroadcastAuthController extends Controller
      */
     public function authenticate(Request $request): JsonResponse
     {
+        if (!Auth::check()) {
+            return response()->json([
+                'error' => 'Unauthorized',
+                'message' => 'You must be logged in to access this channel'
+            ], 401);
+        }
+
         $socketId = $request->input('socket_id');
         $channel = $request->input('channel_name');
 
