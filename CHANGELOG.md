@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.0.1 - 2025-12-05
+
+### What's Changed
+
+* auth middleware removed and auth check added in controller by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/19
+
+**Full Changelog**: https://github.com/doppar/airbend/compare/v1.0.0...v1.0.1
+
 ## v1.0.0-beta.0 - 2025-12-04
 
 ### What's Changed
