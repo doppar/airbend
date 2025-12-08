@@ -6,6 +6,7 @@ use Doppar\Airbend\Broadcasting\Drivers\RedisDriver;
 use Doppar\Airbend\Broadcasting\Drivers\NullDriver;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
+use Doppar\Airbend\Broadcasting\Drivers\WorkermanDriver;
 use Doppar\Airbend\Configuration\ConfigurationManager;
 use Doppar\Airbend\Exceptions\BroadcastConfigurationException;
 use Doppar\Airbend\Monitoring\MetricsCollector;
@@ -215,6 +216,7 @@ class BroadcastManager
             $config = ConfigurationManager::getDriverConfig($driver);
 
             return match ($config['driver'] ?? $driver) {
+                'workerman' => new WorkermanDriver(),
                 'redis' => new RedisDriver(),
                 'null' => new NullDriver(),
                 default => throw BroadcastConfigurationException::unsupportedDriver($config['driver'] ?? $driver),
