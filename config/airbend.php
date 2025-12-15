@@ -11,11 +11,11 @@ return [
     | framework when an event needs to be broadcast. You may set this to
     | any of the connections defined in the "connections" array below.
     |
-    | Supported: "redis", "null"
+    | Supported: "workerman", "redis", "null"
     |
     */
 
-    'default' => env('BROADCAST_DRIVER', 'redis'),
+    'default' => env('BROADCAST_DRIVER', 'workerman'),
 
     /*
     |--------------------------------------------------------------------------
@@ -30,6 +30,10 @@ return [
     */
 
     'connections' => [
+        'workerman' => [
+            'driver' => 'workerman',
+        ],
+
         'redis' => [
             'connection' => env('REDIS_URL', 'redis://127.0.0.1:6379'),
             'prefix' => env('REDIS_PREFIX', ''),
@@ -68,6 +72,11 @@ return [
     */
 
     'websocket' => [
+        'host' => env('WEBSOCKET_HOST', '127.0.0.1'),
+        'port' => (int) env('WEBSOCKET_PORT', 6001),
+        'internal_port' => (int) env('WEBSOCKET_INTERNAL_PORT', 6002),
+        'ssl_cert' => env('WEBSOCKET_SSL_CERT'),
+        'ssl_key' => env('WEBSOCKET_SSL_KEY'),
         'max_connections' => (int) env('WEBSOCKET_MAX_CONNECTIONS', 1000),
         'connection_timeout' => (int) env('WEBSOCKET_CONNECTION_TIMEOUT', 180),
         'heartbeat_interval' => (int) env('WEBSOCKET_HEARTBEAT_INTERVAL', 30),

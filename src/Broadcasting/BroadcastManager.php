@@ -6,6 +6,7 @@ use Doppar\Airbend\Broadcasting\Drivers\RedisDriver;
 use Doppar\Airbend\Broadcasting\Drivers\NullDriver;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
+use Doppar\Airbend\Broadcasting\Drivers\WorkermanDriver;
 use Doppar\Airbend\Configuration\ConfigurationManager;
 use Doppar\Airbend\Exceptions\BroadcastConfigurationException;
 use Doppar\Airbend\Monitoring\MetricsCollector;
@@ -48,9 +49,10 @@ class BroadcastManager
      */
     public function __construct()
     {
-        $this->defaultDriver = ConfigurationManager::get('default', 'websocket');
+        $this->defaultDriver = ConfigurationManager::get('default', 'workerman');
 
         $errors = ConfigurationManager::validateConfiguration();
+
         if (!empty($errors)) {
             throw new BroadcastConfigurationException(
                 'Invalid Airbend configuration: ' . implode(', ', $errors)
@@ -149,6 +151,7 @@ class BroadcastManager
     public function except(string $socketId): self
     {
         $this->exceptSocketId = $socketId;
+
         return $this;
     }
 
@@ -215,6 +218,7 @@ class BroadcastManager
             $config = ConfigurationManager::getDriverConfig($driver);
 
             return match ($config['driver'] ?? $driver) {
+                'workerman' => new WorkermanDriver(),
                 'redis' => new RedisDriver(),
                 'null' => new NullDriver(),
                 default => throw BroadcastConfigurationException::unsupportedDriver($config['driver'] ?? $driver),
