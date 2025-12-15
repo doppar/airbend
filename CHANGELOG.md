@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.1.0 - 2025-12-15
+
+### What's Changed
+
+* adding workerman driver support by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/20
+
+**Full Changelog**: https://github.com/doppar/airbend/compare/v1.0.1...v1.1.0
+
 ## v1.0.1 - 2025-12-05
 
 ### What's Changed
