@@ -189,38 +189,38 @@ class WebSocketServer
 
         $worker->onWorkerStart = function () use ($server, $worker) {
             $worker->handler = $server->handler;
-            
+
             if ($server->broadcastDriver === 'workerman') {
                 $channelHost = ConfigurationManager::get('websocket.channel_host', '127.0.0.1');
                 $channelPort = ConfigurationManager::get('websocket.channel_port', 2206);
                 ChannelClient::connect($channelHost, $channelPort);
-                
+
                 ChannelClient::on('airbend.broadcast', function ($data) use ($server) {
                     $event = $data['event'] ?? '';
                     $channel = $data['channel'] ?? '';
                     $messageData = $data['data'] ?? [];
                     $exceptSocketId = $data['socket_id'] ?? null;
-                    
+
                     if (empty($event) || empty($channel)) {
                         Log::warning("Invalid broadcast message from Channel", $data);
                         return;
                     }
-                    
+
                     $broadcastMessage = [
                         'event' => $event,
                         'data' => $messageData,
                         'channel' => $channel,
                     ];
-                    
+
                     $exceptConnectionId = null;
                     if ($exceptSocketId) {
                         $exceptConnectionId = $server->findConnectionIdBySocketId($exceptSocketId);
                     }
-                    
+
                     $server->handler->broadcastToChannel($channel, $broadcastMessage, $exceptConnectionId);
                 });
             }
-            
+
             if ($server->broadcastDriver === 'redis') {
                 $server->initializeRedisSubscriber($server->handler);
             }

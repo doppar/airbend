@@ -52,6 +52,7 @@ class BroadcastManager
         $this->defaultDriver = ConfigurationManager::get('default', 'workerman');
 
         $errors = ConfigurationManager::validateConfiguration();
+
         if (!empty($errors)) {
             throw new BroadcastConfigurationException(
                 'Invalid Airbend configuration: ' . implode(', ', $errors)
@@ -150,6 +151,7 @@ class BroadcastManager
     public function except(string $socketId): self
     {
         $this->exceptSocketId = $socketId;
+
         return $this;
     }
 
