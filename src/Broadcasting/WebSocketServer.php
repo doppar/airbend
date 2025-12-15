@@ -9,6 +9,8 @@ use Workerman\Timer;
 use Doppar\Airbend\Configuration\ConfigurationManager;
 use Doppar\Airbend\Monitoring\MetricsCollector;
 use Doppar\Airbend\Exceptions\WebSocketException;
+use Channel\Server as ChannelServer;
+use Channel\Client as ChannelClient;
 
 class WebSocketServer
 {
@@ -53,6 +55,13 @@ class WebSocketServer
      * @var Worker|null
      */
     protected ?Worker $internalServer = null;
+
+    /**
+     * WebSocket worker instance
+     *
+     * @var Worker|null
+     */
+    protected ?Worker $webSocketWorker = null;
 
     /**
      * Server start time
@@ -102,6 +111,12 @@ class WebSocketServer
      */
     public function run(): void
     {
+        if ($this->broadcastDriver === 'workerman') {
+            $channelHost = ConfigurationManager::get('websocket.channel_host', '127.0.0.1');
+            $channelPort = ConfigurationManager::get('websocket.channel_port', 2206);
+            new ChannelServer($channelHost, $channelPort);
+        }
+
         $this->createWebSocketServer();
 
         if ($this->broadcastDriver === 'workerman') {
@@ -148,35 +163,69 @@ class WebSocketServer
         $worker = new Worker("websocket://{$host}:{$port}", $context);
         $worker->name = 'WebSocket Server';
         $worker->count = 1;
+        $this->webSocketWorker = $worker;
 
         if ($this->ssl) {
             $worker->transport = 'ssl';
         }
 
-        $handler = $this->handler;
+        $server = $this;
 
-        $worker->onConnect = function (TcpConnection $connection) use ($handler) {
-            $handler->onOpen($connection);
+        $worker->onConnect = function (TcpConnection $connection) use ($server) {
+            $server->handler->onOpen($connection);
         };
 
-        $worker->onMessage = function (TcpConnection $connection, $data) use ($handler) {
-            $handler->onMessage($connection, $data);
+        $worker->onMessage = function (TcpConnection $connection, $data) use ($server) {
+            $server->handler->onMessage($connection, $data);
         };
 
-        $worker->onClose = function (TcpConnection $connection) use ($handler) {
-            $handler->onClose($connection);
+        $worker->onClose = function (TcpConnection $connection) use ($server) {
+            $server->handler->onClose($connection);
         };
 
-        $worker->onError = function (TcpConnection $connection, $code, $msg) use ($handler) {
-            $handler->onError($connection, $code, $msg);
+        $worker->onError = function (TcpConnection $connection, $code, $msg) use ($server) {
+            $server->handler->onError($connection, $code, $msg);
         };
 
-        $worker->onWorkerStart = function () use ($handler) {
-            if ($this->broadcastDriver === 'redis') {
-                $this->initializeRedisSubscriber($handler);
+        $worker->onWorkerStart = function () use ($server, $worker) {
+            $worker->handler = $server->handler;
+            
+            if ($server->broadcastDriver === 'workerman') {
+                $channelHost = ConfigurationManager::get('websocket.channel_host', '127.0.0.1');
+                $channelPort = ConfigurationManager::get('websocket.channel_port', 2206);
+                ChannelClient::connect($channelHost, $channelPort);
+                
+                ChannelClient::on('airbend.broadcast', function ($data) use ($server) {
+                    $event = $data['event'] ?? '';
+                    $channel = $data['channel'] ?? '';
+                    $messageData = $data['data'] ?? [];
+                    $exceptSocketId = $data['socket_id'] ?? null;
+                    
+                    if (empty($event) || empty($channel)) {
+                        Log::warning("Invalid broadcast message from Channel", $data);
+                        return;
+                    }
+                    
+                    $broadcastMessage = [
+                        'event' => $event,
+                        'data' => $messageData,
+                        'channel' => $channel,
+                    ];
+                    
+                    $exceptConnectionId = null;
+                    if ($exceptSocketId) {
+                        $exceptConnectionId = $server->findConnectionIdBySocketId($exceptSocketId);
+                    }
+                    
+                    $server->handler->broadcastToChannel($channel, $broadcastMessage, $exceptConnectionId);
+                });
+            }
+            
+            if ($server->broadcastDriver === 'redis') {
+                $server->initializeRedisSubscriber($server->handler);
             }
 
-            $this->setupPeriodicTasks($handler);
+            $server->setupPeriodicTasks($server->handler);
         };
     }
 
@@ -207,20 +256,28 @@ class WebSocketServer
         $this->internalServer->name = 'Internal Broadcast Server';
         $this->internalServer->count = 1;
 
-        $this->internalServer->onConnect = function (TcpConnection $connection) {
-            $this->onInternalConnect($connection);
+        $server = $this;
+
+        $this->internalServer->onConnect = function (TcpConnection $connection) use ($server) {
+            $server->onInternalConnect($connection);
         };
 
-        $this->internalServer->onMessage = function (TcpConnection $connection, $data) {
-            $this->onInternalMessage($connection, $data);
+        $this->internalServer->onMessage = function (TcpConnection $connection, $data) use ($server) {
+            $server->onInternalMessage($connection, $data);
         };
 
-        $this->internalServer->onClose = function (TcpConnection $connection) {
-            $this->onInternalClose($connection);
+        $this->internalServer->onClose = function (TcpConnection $connection) use ($server) {
+            $server->onInternalClose($connection);
         };
 
-        $this->internalServer->onError = function (TcpConnection $connection, $code, $msg) {
+        $this->internalServer->onError = function (TcpConnection $connection, $code, $msg) use ($server) {
             Log::error("Internal server error: {$msg} (code: {$code})");
+        };
+
+        $this->internalServer->onWorkerStart = function () use ($server) {
+            $channelHost = ConfigurationManager::get('websocket.channel_host', '127.0.0.1');
+            $channelPort = ConfigurationManager::get('websocket.channel_port', 2206);
+            ChannelClient::connect($channelHost, $channelPort);
         };
     }
 
@@ -320,21 +377,18 @@ class WebSocketServer
             return;
         }
 
-        $broadcastMessage = [
+        $channelMessage = [
             'event' => $event,
-            'data' => $data,
             'channel' => $channel,
+            'data' => $data,
+            'socket_id' => $exceptSocketId,
         ];
 
-        $exceptConnectionId = null;
-        if ($exceptSocketId) {
-            $exceptConnectionId = $this->findConnectionIdBySocketId($exceptSocketId);
-        }
-
-        $this->handler->broadcastToChannel($channel, $broadcastMessage, $exceptConnectionId);
+        ChannelClient::publish('airbend.broadcast', $channelMessage);
 
         MetricsCollector::recordMessage('broadcasted');
     }
+
 
     /**
      * Find connection ID by socket ID
@@ -374,10 +428,6 @@ class WebSocketServer
                 $this->cleanupStaleInternalConnections();
             });
         }
-
-        // Timer::add(300, function () use ($handler) {
-        //     $this->logStatistics($handler);
-        // });
 
         Timer::add(60, function () {
             $memoryUsage = memory_get_usage(true) / 1024 / 1024;
