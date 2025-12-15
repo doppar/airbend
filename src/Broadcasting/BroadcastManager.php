@@ -49,7 +49,7 @@ class BroadcastManager
      */
     public function __construct()
     {
-        $this->defaultDriver = ConfigurationManager::get('default', 'websocket');
+        $this->defaultDriver = ConfigurationManager::get('default', 'workerman');
 
         $errors = ConfigurationManager::validateConfiguration();
         if (!empty($errors)) {
