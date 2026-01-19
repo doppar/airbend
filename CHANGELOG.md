@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.1.1 - 2026-01-19
+
+### What's Changed
+
+* composer.json updated by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/21
+
+**Full Changelog**: https://github.com/doppar/airbend/compare/v1.1.0...v1.1.1
+
 ## v1.1.0 - 2025-12-15
 
 ### What's Changed
