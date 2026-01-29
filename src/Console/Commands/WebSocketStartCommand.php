@@ -29,7 +29,7 @@ class WebSocketStartCommand extends Command
      *
      * @return int
      */
-    protected function handle(): int
+    public function handle(): int
     {
         $host = $this->option('host');
         $port = $this->option('port');
