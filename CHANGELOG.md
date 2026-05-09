@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.1.2 - 2026-05-09
+
+### What's Changed
+
+* console command handle() method dependency injection: by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/22
+
+**Full Changelog**: https://github.com/doppar/airbend/compare/v1.1.1...v1.1.2
+
 ## v1.1.1 - 2026-01-19
 
 ### What's Changed
