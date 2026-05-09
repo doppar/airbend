@@ -28,9 +28,7 @@ class MakeEventCommand extends Command
     public function handle(): int
     {
         return $this->executeWithTiming(function () {
-            $name = $this->argument('name');
-            $parts = explode('/', $name);
-            $className = array_pop($parts);
+            [$name, $parts, $className] = $this->splitGeneratedName((string) $this->argument('name'));
 
             // Ensure class name ends with Event
             if (!str_ends_with($className, 'Event')) {
@@ -38,14 +36,13 @@ class MakeEventCommand extends Command
             }
 
             $namespace = 'App\\Events' . (count($parts) > 0 ? '\\' . implode('\\', $parts) : '');
-            $parts[] = $className;
-
-            $filePath = base_path('app/Events/' . implode(DIRECTORY_SEPARATOR, $parts) . '.php');
+            $fileName = count($parts) > 0 ? implode('/', $parts) . '/' . $className : $className;
+            $filePath = $this->generatedFilePath('app/Events', $fileName);
 
             // Check if Event already exists
             if (file_exists($filePath)) {
                 $this->displayError('Event already exists at:');
-                $this->line('<fg=white>' . str_replace(base_path(), '', $filePath) . '</>');
+                $this->line('<fg=white>' . $this->relativePath($filePath) . '</>');
                 return Command::FAILURE;
             }
 
@@ -64,7 +61,7 @@ class MakeEventCommand extends Command
             file_put_contents($filePath, $content);
 
             $this->displaySuccess('Event created successfully');
-            $this->line('<fg=yellow>📦 File:</> <fg=white>' . str_replace(base_path(), '', $filePath) . '</>');
+            $this->line('<fg=yellow>📦 File:</> <fg=white>' . $this->relativePath($filePath) . '</>');
             $this->newLine();
             $this->line('<fg=yellow>⚙️  Class:</> <fg=white>' . $className . '</>');
 
