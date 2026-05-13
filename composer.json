@@ -32,11 +32,6 @@
             "Doppar\\Airbend\\Tests\\": "tests/"
         }
     },
-    "extra": {
-        "branch-alias": {
-            "dev-master": "1.x-dev"
-        }
-    },
     "config": {
         "sort-packages": true
     },
