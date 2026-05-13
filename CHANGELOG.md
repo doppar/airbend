@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.1.3 - 2026-05-13
+
+### What's Changed
+
+* update composer.json: removed branch alias by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/23
+
+**Full Changelog**: https://github.com/doppar/airbend/compare/v1.1.2...v1.1.3
+
 ## v1.1.2 - 2026-05-09
 
 ### What's Changed
