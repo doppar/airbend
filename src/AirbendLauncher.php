@@ -2,12 +2,12 @@
 
 namespace Doppar\Airbend;
 
-use Phaseolies\Providers\ServiceProvider;
+use Phaseolies\Launchers\ServiceLauncher;
 use Doppar\Airbend\Broadcasting\BroadcastManager;
 use Doppar\Airbend\Console\Commands\MakeEventCommand;
 use Doppar\Airbend\Console\Commands\WebSocketStartCommand;
 
-class AirbendServiceProvider extends ServiceProvider
+class AirbendLauncher extends ServiceLauncher
 {
     /**
      * Register any application services.
@@ -26,12 +26,12 @@ class AirbendServiceProvider extends ServiceProvider
      *
      * @return void
      */
-    public function boot(): void
+    public function launch(): void
     {
         $this->loadRoutes(__DIR__ . '/../routes/airbend.php');
 
-        if (file_exists(base_path('routes/channels.php'))) {
-            require base_path('routes/channels.php');
+        if (file_exists(base_path('runtime/routes/channels.php'))) {
+            require base_path('runtime/routes/channels.php');
         }
 
         $this->publishes([
@@ -43,8 +43,8 @@ class AirbendServiceProvider extends ServiceProvider
         ], 'public');
 
         $this->publishes([
-            __DIR__ . '/../routes/channels.php' => base_path('routes/channels.php'),
-        ], 'views');
+            __DIR__ . '/../routes/channels.php' => base_path('runtime/routes/channels.php'),
+        ], 'routes');
 
         $this->commands([
             WebSocketStartCommand::class,

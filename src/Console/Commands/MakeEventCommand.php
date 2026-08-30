@@ -37,7 +37,7 @@ class MakeEventCommand extends Command
 
             $namespace = 'App\\Events' . (count($parts) > 0 ? '\\' . implode('\\', $parts) : '');
             $fileName = count($parts) > 0 ? implode('/', $parts) . '/' . $className : $className;
-            $filePath = $this->generatedFilePath('app/Events', $fileName);
+            $filePath = $this->generatedFilePath('src/Events', $fileName);
 
             // Check if Event already exists
             if (file_exists($filePath)) {
