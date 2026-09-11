@@ -86,7 +86,7 @@ class MakeEventCommandTest extends TestCase
         };
 
         $result = $command->handle();
-        $file = $this->tempRoot . '/app/Events/Realtime/OrderPlacedEvent.php';
+        $file = $this->tempRoot . '/src/Events/Realtime/OrderPlacedEvent.php';
         $contents = (string) file_get_contents($file);
 
         $this->assertSame(0, $result);
@@ -95,7 +95,7 @@ class MakeEventCommandTest extends TestCase
         $this->assertStringContainsString('class OrderPlacedEvent extends BaseBroadcastEvent', $contents);
         $this->assertContains('Event created successfully', $command->capturedSuccesses);
         $this->assertContains(
-            '<fg=yellow>📦 File:</> <fg=white>app/Events/Realtime/OrderPlacedEvent.php</>',
+            '<fg=yellow>📦 File:</> <fg=white>src/Events/Realtime/OrderPlacedEvent.php</>',
             $command->capturedLines
         );
     }

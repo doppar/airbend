@@ -28,7 +28,6 @@ class HandlesChannelsTest extends TestCase
             $this->connections[$i] = $conn;
 
             $clientMetadataProperty = $this->handlerReflection->getProperty('clientMetadata');
-            $clientMetadataProperty->setAccessible(true);
             $clientMetadata = $clientMetadataProperty->getValue($this->handler);
             $clientMetadata[$i] = [
                 'socket_id' => "socket-{$i}",
@@ -199,9 +198,8 @@ class HandlesChannelsTest extends TestCase
     public function testGetChannelStatsEmpty()
     {
         $clientsProperty = $this->handlerReflection->getProperty('clients');
-        $clientsProperty->setAccessible(true);
         $clients = $clientsProperty->getValue($this->handler);
-        $clients->attach($this->connections[1]);
+        $clients->offsetSet($this->connections[1]);
 
         $stats = $this->handler->getChannelStats();
 
@@ -213,10 +211,9 @@ class HandlesChannelsTest extends TestCase
     public function testGetChannelStatsWithPublicChannels()
     {
         $clientsProperty = $this->handlerReflection->getProperty('clients');
-        $clientsProperty->setAccessible(true);
         $clients = $clientsProperty->getValue($this->handler);
-        $clients->attach($this->connections[1]);
-        $clients->attach($this->connections[2]);
+        $clients->offsetSet($this->connections[1]);
+        $clients->offsetSet($this->connections[2]);
 
         $this->subscribeToChannel($this->connections[1], 'public-channel');
         $this->subscribeToChannel($this->connections[2], 'public-channel');
@@ -233,9 +230,8 @@ class HandlesChannelsTest extends TestCase
     public function testGetChannelStatsWithPrivateChannels()
     {
         $clientsProperty = $this->handlerReflection->getProperty('clients');
-        $clientsProperty->setAccessible(true);
         $clients = $clientsProperty->getValue($this->handler);
-        $clients->attach($this->connections[1]);
+        $clients->offsetSet($this->connections[1]);
 
         $this->subscribeToChannel($this->connections[1], 'private-channel');
 
@@ -248,14 +244,12 @@ class HandlesChannelsTest extends TestCase
     public function testGetChannelStatsWithPresenceChannels()
     {
         $clientsProperty = $this->handlerReflection->getProperty('clients');
-        $clientsProperty->setAccessible(true);
         $clients = $clientsProperty->getValue($this->handler);
-        $clients->attach($this->connections[1]);
+        $clients->offsetSet($this->connections[1]);
 
         $this->subscribeToChannel($this->connections[1], 'presence-channel');
 
         $presenceChannelsProperty = $this->handlerReflection->getProperty('presenceChannels');
-        $presenceChannelsProperty->setAccessible(true);
         $presenceChannels = $presenceChannelsProperty->getValue($this->handler);
         $presenceChannels['presence-channel'] = [
             'user-1' => ['id' => 'user-1', 'info' => [], 'connections' => [1]],
@@ -273,10 +267,9 @@ class HandlesChannelsTest extends TestCase
     public function testGetChannelStatsWithMixedChannels()
     {
         $clientsProperty = $this->handlerReflection->getProperty('clients');
-        $clientsProperty->setAccessible(true);
         $clients = $clientsProperty->getValue($this->handler);
-        $clients->attach($this->connections[1]);
-        $clients->attach($this->connections[2]);
+        $clients->offsetSet($this->connections[1]);
+        $clients->offsetSet($this->connections[2]);
 
         $this->subscribeToChannel($this->connections[1], 'public-channel');
         $this->subscribeToChannel($this->connections[2], 'private-channel');
@@ -318,7 +311,6 @@ class HandlesChannelsTest extends TestCase
         $this->subscribeToChannel($this->connections[1], $channel);
 
         $presenceChannelsProperty = $this->handlerReflection->getProperty('presenceChannels');
-        $presenceChannelsProperty->setAccessible(true);
         $presenceChannels = $presenceChannelsProperty->getValue($this->handler);
         $presenceChannels[$channel] = [
             'user-1' => ['id' => 'user-1', 'info' => [], 'connections' => [1]],
@@ -337,7 +329,6 @@ class HandlesChannelsTest extends TestCase
         $this->subscribeToChannel($this->connections[1], $channel);
 
         $privateChannelsProperty = $this->handlerReflection->getProperty('privateChannels');
-        $privateChannelsProperty->setAccessible(true);
         $privateChannels = $privateChannelsProperty->getValue($this->handler);
         $privateChannels[$channel] = [$this->connections[1]];
         $privateChannelsProperty->setValue($this->handler, $privateChannels);
@@ -357,7 +348,6 @@ class HandlesChannelsTest extends TestCase
     private function subscribeToChannel(TcpConnection $conn, string $channel): void
     {
         $channelsProperty = $this->handlerReflection->getProperty('channels');
-        $channelsProperty->setAccessible(true);
         $channels = $channelsProperty->getValue($this->handler);
 
         if (!isset($channels[$channel])) {
@@ -367,7 +357,6 @@ class HandlesChannelsTest extends TestCase
         $channelsProperty->setValue($this->handler, $channels);
 
         $clientMetadataProperty = $this->handlerReflection->getProperty('clientMetadata');
-        $clientMetadataProperty->setAccessible(true);
         $clientMetadata = $clientMetadataProperty->getValue($this->handler);
 
         $clientMetadata[$conn->id]['subscribed_channels'][] = $channel;
@@ -377,7 +366,6 @@ class HandlesChannelsTest extends TestCase
     private function unsubscribeFromChannel(TcpConnection $conn, string $channel): void
     {
         $channelsProperty = $this->handlerReflection->getProperty('channels');
-        $channelsProperty->setAccessible(true);
         $channels = $channelsProperty->getValue($this->handler);
 
         if (isset($channels[$channel])) {
@@ -393,7 +381,6 @@ class HandlesChannelsTest extends TestCase
         }
 
         $clientMetadataProperty = $this->handlerReflection->getProperty('clientMetadata');
-        $clientMetadataProperty->setAccessible(true);
         $clientMetadata = $clientMetadataProperty->getValue($this->handler);
 
         if (isset($clientMetadata[$conn->id])) {

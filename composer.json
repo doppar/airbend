@@ -10,14 +10,15 @@
         }
     ],
     "require": {
+        "php": "^8.5",
         "predis/predis": "^3.3",
         "workerman/channel": "^1.2",
         "workerman/workerman": "^5.1"
     },
     "require-dev": {
         "mockery/mockery": "^1.6",
-        "phpunit/phpunit": "^12.1.5",
-        "doppar/framework": "3.*"
+        "phpunit/phpunit": "^13.3",
+        "doppar/framework": "4.*"
     },
     "autoload": {
         "psr-4": {
