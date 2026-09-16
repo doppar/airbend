@@ -16,17 +16,17 @@
 Doppar Airbend is a high-performance, real-time broadcasting component of the Doppar PHP Framework, engineered to deliver seamless WebSocket-based event broadcasting, robust channel authorization, and comprehensive performance monitoring. Designed for modern, scalable web applications, Airbend allows developers to build interactive and collaborative features—such as live notifications, chat systems, dashboards, and multiplayer experiences—directly within the Doppar ecosystem.
 
 ## Documentation
-Read the documentation from airbend official site [Doppar Airbend](https://doppar.com/versions/3.x/doppar-airbend.html)
+Read the documentation from airbend official site [Doppar Airbend](https://doppar.com/versions/4.x/doppar-airbend)
 
 ---
 
 ## Contributing
 
-Thank you for considering contributing to the Doppar framework! The contribution guide can be found in the [Doppar documentation](https://airbend.com/versions/3.x/contributions.html).
+Thank you for considering contributing to the Doppar framework! The contribution guide can be found in the [Doppar documentation](https://airbend.com/versions/4.x/contributions).
 
 ## Code of Conduct
 
-In order to ensure that the Doppar community is welcoming to all, please review and abide by the [Code of Conduct](https://airbend.com/versions/3.x/contributions.html#code-of-conduct).
+In order to ensure that the Doppar community is welcoming to all, please review and abide by the [Code of Conduct](https://airbend.com/versions/4.x/contributions#code-of-conduct).
 
 ## Security Vulnerabilities
 
