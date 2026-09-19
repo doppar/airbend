@@ -1,5 +1,16 @@
 # Release Notes
 
+## 4.0.0 - 2026-09-16
+
+### What's Changed
+
+* ready for doppar 4.x by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/24
+* tests.yml for php8.5 by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/25
+* fix phpstan error by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/26
+* readme.md updated for 4.x version: by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/27
+
+**Full Changelog**: https://github.com/doppar/airbend/compare/v1.1.3...4.0.0
+
 ## v1.1.3 - 2026-05-13
 
 ### What's Changed
