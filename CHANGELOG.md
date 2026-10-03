@@ -1,5 +1,13 @@
 # Release Notes
 
+## v4.1.0 - 2026-10-03
+
+### What's Changed
+
+* production hardening and removal of MetricsCollector by [@techmahedy](https://github.com/techmahedy) in https://github.com/doppar/airbend/pull/28
+
+**Full Changelog**: https://github.com/doppar/airbend/compare/4.0.0...v4.1.0
+
 ## 4.0.0 - 2026-09-16
 
 ### What's Changed
