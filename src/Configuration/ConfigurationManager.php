@@ -28,8 +28,6 @@ class ConfigurationManager
                 'host' => ['type' => 'string', 'default' => '127.0.0.1'],
                 'port' => ['type' => 'integer', 'default' => 6001, 'min' => 1, 'max' => 65535],
                 'ssl' => ['type' => 'boolean', 'default' => false],
-                'app_key' => ['type' => 'string', 'default' => 'doppar-app-key'],
-                'app_secret' => ['type' => 'string', 'default' => 'doppar-app-secret'],
                 'channel' => ['type' => 'string', 'default' => 'doppar-broadcast'],
                 'max_connections' => ['type' => 'integer', 'default' => 1000, 'min' => 1],
                 'connection_timeout' => ['type' => 'integer', 'default' => 180, 'min' => 1],
@@ -176,6 +174,82 @@ class ConfigurationManager
         }
 
         return is_array($schema) ? $schema : null;
+    }
+
+    /**
+     * Placeholder secrets that ship as defaults and must never protect a real deployment
+     *
+     * @var array<int, string>
+     */
+    protected const PLACEHOLDER_SECRETS = ['doppar-app-secret', 'changeme', 'secret'];
+
+    /**
+     * Environments where a placeholder secret is tolerated
+     *
+     * @var array<int, string>
+     */
+    protected const DEVELOPMENT_ENVIRONMENTS = ['local', 'development', 'dev', 'testing', 'test'];
+
+    /**
+     * Get the application key used to sign channel authorizations
+     *
+     * @return string
+     * @throws BroadcastConfigurationException
+     */
+    public static function appKey(): string
+    {
+        $key = config('airbend.authorize.app_key');
+
+        if (!is_string($key) || $key === '') {
+            throw BroadcastConfigurationException::invalidConfigurationValue(
+                'authorize.app_key',
+                $key,
+                'a non-empty string'
+            );
+        }
+
+        return $key;
+    }
+
+    /**
+     * Get the secret used to sign channel authorizations and internal broadcasts
+     *
+     * @return string
+     * @throws BroadcastConfigurationException
+     */
+    public static function appSecret(): string
+    {
+        $secret = config('airbend.authorize.app_secret');
+
+        if (!is_string($secret) || $secret === '') {
+            throw BroadcastConfigurationException::invalidConfigurationValue(
+                'authorize.app_secret',
+                $secret,
+                'a non-empty string (set WEBSOCKET_APP_SECRET)'
+            );
+        }
+
+        if (in_array($secret, static::PLACEHOLDER_SECRETS, true) && !static::isDevelopmentEnvironment()) {
+            throw BroadcastConfigurationException::invalidConfigurationValue(
+                'authorize.app_secret',
+                '[placeholder]',
+                'a unique secret outside local/testing environments (set WEBSOCKET_APP_SECRET)'
+            );
+        }
+
+        return $secret;
+    }
+
+    /**
+     * Determine whether the application runs in a development environment
+     *
+     * @return bool
+     */
+    protected static function isDevelopmentEnvironment(): bool
+    {
+        $env = config('app.env') ?? env('APP_ENV', 'production');
+
+        return is_string($env) && in_array(strtolower($env), static::DEVELOPMENT_ENVIRONMENTS, true);
     }
 
     /**

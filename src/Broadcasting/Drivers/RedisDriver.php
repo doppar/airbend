@@ -7,7 +7,6 @@ use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
 use Doppar\Airbend\Broadcasting\Concerns\HandleRedisConnection;
 use Doppar\Airbend\Configuration\ConfigurationManager;
 use Doppar\Airbend\Exceptions\RedisConnectionException;
-use Doppar\Airbend\Monitoring\MetricsCollector;
 
 class RedisDriver implements BroadcastDriver
 {
@@ -58,8 +57,6 @@ class RedisDriver implements BroadcastDriver
             return;
         }
 
-        MetricsCollector::startTiming();
-
         try {
             // Validate Redis connection
             if ($this->redis === null) {
@@ -87,18 +84,13 @@ class RedisDriver implements BroadcastDriver
             if ($result === false) {
                 throw RedisConnectionException::operationFailed('lpush', 'Failed to push message to Redis queue');
             }
-
-            MetricsCollector::recordMessage('sent');
         } catch (\JsonException $e) {
-            MetricsCollector::recordError('broadcast');
             throw RedisConnectionException::operationFailed(
                 'json_encode',
                 'Failed to encode broadcast payload: ' . $e->getMessage(),
                 $e
             );
         } catch (\Exception $e) {
-            MetricsCollector::recordError('broadcast');
-
             if ($e instanceof RedisConnectionException) {
                 throw $e;
             }
@@ -108,8 +100,6 @@ class RedisDriver implements BroadcastDriver
                 $e->getMessage(),
                 $e
             );
-        } finally {
-            MetricsCollector::endTiming('websocket_broadcast');
         }
     }
 
@@ -124,36 +114,27 @@ class RedisDriver implements BroadcastDriver
      */
     public function authenticate(string $socketId, string $channel, ?array $userData = null): array
     {
-        MetricsCollector::startTiming();
+        $appKey = ConfigurationManager::appKey();
+        $appSecret = ConfigurationManager::appSecret();
 
-        try {
-            $appKey = ConfigurationManager::get('authorize.app_key', 'doppar-app-key');
-            $appSecret = ConfigurationManager::get('authorize.app_secret', 'doppar-app-secret');
-
-            if (str_starts_with($channel, 'presence-')) {
-                // Presence channel authentication
-                $channelData = json_encode($userData, JSON_THROW_ON_ERROR);
-                $stringToSign = "{$socketId}:{$channel}:{$channelData}";
-                $signature = hash_hmac('sha256', $stringToSign, $appSecret);
-
-                return [
-                    'auth' => "{$appKey}:{$signature}",
-                    'channel_data' => $channelData,
-                ];
-            }
-
-            // Private channel authentication
-            $stringToSign = "{$socketId}:{$channel}";
+        if (str_starts_with($channel, 'presence-')) {
+            // Presence channel authentication
+            $channelData = json_encode($userData, JSON_THROW_ON_ERROR);
+            $stringToSign = "{$socketId}:{$channel}:{$channelData}";
             $signature = hash_hmac('sha256', $stringToSign, $appSecret);
 
             return [
                 'auth' => "{$appKey}:{$signature}",
+                'channel_data' => $channelData,
             ];
-        } catch (\JsonException $e) {
-            MetricsCollector::recordError('authentication');
-            throw $e;
-        } finally {
-            MetricsCollector::endTiming('authentication');
         }
+
+        // Private channel authentication
+        $stringToSign = "{$socketId}:{$channel}";
+        $signature = hash_hmac('sha256', $stringToSign, $appSecret);
+
+        return [
+            'auth' => "{$appKey}:{$signature}",
+        ];
     }
 }

@@ -4,6 +4,7 @@ namespace Doppar\Airbend\Console\Commands;
 
 use Phaseolies\Console\Schedule\Command;
 use Doppar\Airbend\Broadcasting\WebSocketServer;
+use Doppar\Airbend\Configuration\ConfigurationManager;
 
 class WebSocketStartCommand extends Command
 {
@@ -13,8 +14,8 @@ class WebSocketStartCommand extends Command
      * @var string
      */
     protected $name = 'websocket:start
-                      {--host=127.0.0.1 : The host to bind the WebSocket server}
-                      {--port=6001 : The port to bind the WebSocket server}
+                      {--host= : The host to bind the WebSocket server (defaults to websocket.host)}
+                      {--port= : The port to bind the WebSocket server (defaults to websocket.port)}
                       {--ssl : Enable SSL/TLS for secure connections}';
 
     /**
@@ -31,10 +32,11 @@ class WebSocketStartCommand extends Command
      */
     public function handle(): int
     {
-        $host = $this->option('host');
-        $port = $this->option('port');
-        $ssl = $this->option('ssl');
+        $host = $this->option('host') ?: ConfigurationManager::get('websocket.host', '127.0.0.1');
+        $port = (int) ($this->option('port') ?: ConfigurationManager::get('websocket.port', 6001));
+        $ssl = (bool) $this->option('ssl') || (bool) ConfigurationManager::get('websocket.ssl', false);
 
+        $this->newLine();
         $this->displayInfo("Starting Doppar WebSocket Server...");
         $this->newLine();
 
@@ -62,7 +64,7 @@ class WebSocketStartCommand extends Command
             $server->run();
 
             return 0;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->displayError("Failed to start WebSocket server: " . $e->getMessage());
             return 1;
         }

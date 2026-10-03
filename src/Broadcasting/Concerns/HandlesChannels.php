@@ -137,6 +137,5 @@ trait HandlesChannels
 
         unset($this->channels[$channel]);
         unset($this->presenceChannels[$channel]);
-        unset($this->privateChannels[$channel]);
     }
 }

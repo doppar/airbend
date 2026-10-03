@@ -4,8 +4,8 @@ namespace Doppar\Airbend\Broadcasting\Drivers;
 
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastEvent;
 use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
+use Doppar\Airbend\Broadcasting\InternalMessageSigner;
 use Doppar\Airbend\Configuration\ConfigurationManager;
-use Doppar\Airbend\Monitoring\MetricsCollector;
 use Doppar\Airbend\Exceptions\BroadcastConfigurationException;
 
 class WorkermanDriver implements BroadcastDriver
@@ -45,7 +45,7 @@ class WorkermanDriver implements BroadcastDriver
      */
     public function __construct()
     {
-        $this->internalHost = ConfigurationManager::get('websocket.host', '127.0.0.1');
+        $this->internalHost = ConfigurationManager::get('websocket.internal_host', '127.0.0.1');
         $this->internalPort = ConfigurationManager::get('websocket.internal_port', 6002);
     }
 
@@ -75,12 +75,14 @@ class WorkermanDriver implements BroadcastDriver
         );
 
         if ($this->socket === false) {
+            $this->socket = null;
+
             throw new \Exception(
                 "Failed to connect to internal broadcast server at {$this->internalHost}:{$this->internalPort} - {$errstr} ({$errno})"
             );
         }
 
-        stream_set_blocking($this->socket, false);
+        stream_set_blocking($this->socket, true);
 
         stream_set_timeout($this->socket, $this->connectionTimeout);
     }
@@ -99,34 +101,25 @@ class WorkermanDriver implements BroadcastDriver
             return;
         }
 
-        MetricsCollector::startTiming();
+        $payload = [
+            'type' => 'broadcast',
+            'event' => $event->broadcastAs(),
+            'channel' => $channel,
+            'data' => $event->broadcastWith(),
+            'socket_id' => $options['except'] ?? null,
+            'timestamp' => time(),
+            'message_id' => uniqid('msg_', true),
+        ];
 
-        try {
-            $eventName = $event->broadcastAs();
-            $eventData = $event->broadcastWith();
-
-            $payload = [
-                'type' => 'broadcast',
-                'event' => $eventName,
-                'channel' => $channel,
-                'data' => $eventData,
-                'socket_id' => $options['except'] ?? null,
-                'timestamp' => time(),
-                'message_id' => uniqid('msg_', true),
-            ];
-
-            $this->sendMessage($payload);
-
-            MetricsCollector::recordMessage('sent');
-        } catch (\Exception $e) {
-            MetricsCollector::recordError('broadcast');
-        } finally {
-            MetricsCollector::endTiming('workerman_broadcast');
-        }
+        // A failure is not swallowed: the broadcast manager logs it with the channel and event.
+        $this->sendMessage($payload);
     }
 
     /**
-     * Send message through socket connection
+     * Send a signed message through the socket connection
+     *
+     * The socket is blocking so a partial write is retried until the whole
+     * frame is out, and the server's acknowledgement is read so errors surface.
      *
      * @param array $message
      * @return void
@@ -134,27 +127,80 @@ class WorkermanDriver implements BroadcastDriver
      */
     protected function sendMessage(array $message): void
     {
-        $jsonMessage = json_encode($message, JSON_THROW_ON_ERROR);
-        $data = $jsonMessage . "\n";
+        $data = InternalMessageSigner::sign($message) . "\n";
 
-        if (!$this->socket || feof($this->socket)) {
-            $this->connect();
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            try {
+                $this->connect();
+
+                if ($this->writeAll($data)) {
+                    $this->readAcknowledgement();
+
+                    return;
+                }
+            } catch (\Exception $e) {
+                if ($attempt === 1) {
+                    throw $e;
+                }
+            }
+
+            // A stale keep-alive connection: reconnect once and resend
+            $this->disconnect();
         }
 
-        $written = @fwrite($this->socket, $data);
+        throw new \Exception('Failed to send broadcast message to internal server');
+    }
 
-        if ($written === false || $written === 0) {
-            $this->disconnect();
-            $this->connect();
+    /**
+     * Write the whole buffer, handling partial writes
+     *
+     * @param string $data
+     * @return bool
+     */
+    protected function writeAll(string $data): bool
+    {
+        $length = strlen($data);
+        $offset = 0;
 
-            $written = @fwrite($this->socket, $data);
+        while ($offset < $length) {
+            $written = @fwrite($this->socket, substr($data, $offset));
 
             if ($written === false || $written === 0) {
-                throw new \Exception("Failed to send broadcast message to internal server");
+                return false;
             }
+
+            $offset += $written;
         }
 
-        @fflush($this->socket);
+        return true;
+    }
+
+    /**
+     * Read the server's reply so a rejected broadcast is not silently lost
+     *
+     * @return void
+     * @throws \Exception
+     */
+    protected function readAcknowledgement(): void
+    {
+        if (!is_resource($this->socket)) {
+            return;
+        }
+
+        $line = @fgets($this->socket);
+
+        if ($line === false) {
+            // No reply within the timeout (or the peer closed): treat the link as stale
+            $this->disconnect();
+
+            return;
+        }
+
+        $reply = json_decode($line, true);
+
+        if (is_array($reply) && ($reply['type'] ?? null) === 'error') {
+            throw new \Exception('Internal broadcast server rejected the message: ' . ($reply['message'] ?? 'unknown error'));
+        }
     }
 
     /**
@@ -168,35 +214,26 @@ class WorkermanDriver implements BroadcastDriver
      */
     public function authenticate(string $socketId, string $channel, ?array $userData = null): array
     {
-        MetricsCollector::startTiming();
+        $appKey = ConfigurationManager::appKey();
+        $appSecret = ConfigurationManager::appSecret();
 
-        try {
-            $appKey = ConfigurationManager::get('authorize.app_key', 'doppar-app-key');
-            $appSecret = ConfigurationManager::get('authorize.app_secret', 'doppar-app-secret');
-
-            if (str_starts_with($channel, 'presence-')) {
-                $channelData = json_encode($userData, JSON_THROW_ON_ERROR);
-                $stringToSign = "{$socketId}:{$channel}:{$channelData}";
-                $signature = hash_hmac('sha256', $stringToSign, $appSecret);
-
-                return [
-                    'auth' => "{$appKey}:{$signature}",
-                    'channel_data' => $channelData,
-                ];
-            }
-
-            $stringToSign = "{$socketId}:{$channel}";
+        if (str_starts_with($channel, 'presence-')) {
+            $channelData = json_encode($userData, JSON_THROW_ON_ERROR);
+            $stringToSign = "{$socketId}:{$channel}:{$channelData}";
             $signature = hash_hmac('sha256', $stringToSign, $appSecret);
 
             return [
                 'auth' => "{$appKey}:{$signature}",
+                'channel_data' => $channelData,
             ];
-        } catch (\JsonException $e) {
-            MetricsCollector::recordError('authentication');
-            throw $e;
-        } finally {
-            MetricsCollector::endTiming('authentication');
         }
+
+        $stringToSign = "{$socketId}:{$channel}";
+        $signature = hash_hmac('sha256', $stringToSign, $appSecret);
+
+        return [
+            'auth' => "{$appKey}:{$signature}",
+        ];
     }
 
     /**

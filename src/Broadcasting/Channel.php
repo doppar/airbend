@@ -82,7 +82,13 @@ class Channel
      */
     protected static function buildRegexFromPattern(string $pattern): string
     {
-        $regex = preg_replace('/\{(\w+)\}/', '(?P<$1>[^.]+)', $pattern);
+        // Quote the literal text so characters such as "." or "*" in a pattern match themselves
+        $parts = preg_split('/\{(\w+)\}/', $pattern, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$pattern];
+        $regex = '';
+
+        foreach ($parts as $index => $part) {
+            $regex .= $index % 2 === 1 ? "(?P<{$part}>[^.]+)" : preg_quote($part, '#');
+        }
 
         return '#^' . $regex . '$#';
     }
@@ -110,7 +116,9 @@ class Channel
             if (static::matchesPattern($channel, $pattern)) {
                 $params = static::extractParameters($channel, $pattern);
 
-                return $callback($request, ...array_values($params));
+                $result = $callback($request, ...array_values($params));
+
+                return is_array($result) ? $result : (bool) $result;
             }
         }
 

@@ -29,7 +29,7 @@ class BroadcastAuthController extends Controller
         $socketId = $request->input('socket_id');
         $channel = $request->input('channel_name');
 
-        if (!$socketId || !$channel) {
+        if (!is_string($socketId) || !is_string($channel) || $socketId === '' || $channel === '') {
             return response()->json([
                 'error' => 'Missing required parameters',
                 'message' => 'Both socket_id and channel_name are required'
@@ -70,7 +70,9 @@ class BroadcastAuthController extends Controller
             $auth = Broadcast::driver()->authenticate($socketId, $channel, $userData);
 
             return response()->json($auth);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            \Phaseolies\Support\Facades\Log::error('Broadcast authentication failed', ['error' => $e->getMessage()]);
+
             return response()->json([
                 'error' => 'Authentication failed',
                 'message' => 'An error occurred during authentication'
