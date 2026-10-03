@@ -4,6 +4,7 @@ namespace Doppar\Airbend\Broadcasting\Concerns;
 
 use Workerman\Connection\TcpConnection;
 use Phaseolies\Support\Facades\Log;
+use Doppar\Airbend\Configuration\ConfigurationManager;
 
 trait HandlesAuthentication
 {
@@ -20,7 +21,7 @@ trait HandlesAuthentication
         $socketId = $this->clientMetadata[$conn->id]['socket_id'] ?? null;
         $auth = $authData['auth'] ?? null;
 
-        if (!$auth || !$socketId) {
+        if (!is_string($auth) || $auth === '' || !is_string($socketId)) {
             return false;
         }
 
@@ -48,21 +49,22 @@ trait HandlesAuthentication
         $auth = $authData['auth'] ?? null;
         $channelData = $authData['channel_data'] ?? null;
 
-        if (!$auth || !$socketId || !$channelData) {
+        if (!is_string($auth) || $auth === '' || !is_string($socketId) || !is_string($channelData) || $channelData === '') {
             return false;
         }
 
-        // Decode channel data
-        $userData = json_decode($channelData, true);
-        if (!$userData || !isset($userData['user_id'])) {
-            return false;
-        }
+        // Verify the signature before trusting (or decoding) the channel data
 
         // Verify HMAC signature including channel data
         $signature = $this->generatePresenceAuthSignature($socketId, $channel, $channelData);
 
         if (!hash_equals($signature, $auth)) {
             Log::warning("Invalid presence auth for channel: {$channel}");
+            return false;
+        }
+
+        $userData = json_decode($channelData, true);
+        if (!is_array($userData) || !isset($userData['user_id']) || !(is_string($userData['user_id']) || is_int($userData['user_id']))) {
             return false;
         }
 
@@ -78,8 +80,8 @@ trait HandlesAuthentication
      */
     protected function generateAuthSignature(string $socketId, string $channel): string
     {
-        $appKey = config('airbend.authorize.app_key');
-        $appSecret = config('airbend.authorize.app_secret');
+        $appKey = ConfigurationManager::appKey();
+        $appSecret = ConfigurationManager::appSecret();
         $stringToSign = "{$socketId}:{$channel}";
 
         return "{$appKey}:" . hash_hmac('sha256', $stringToSign, $appSecret);
@@ -95,8 +97,8 @@ trait HandlesAuthentication
      */
     protected function generatePresenceAuthSignature(string $socketId, string $channel,  string $channelData): string
     {
-        $appKey = config('airbend.authorize.app_key');
-        $appSecret = config('airbend.authorize.app_secret');
+        $appKey = ConfigurationManager::appKey();
+        $appSecret = ConfigurationManager::appSecret();
         $stringToSign = "{$socketId}:{$channel}:{$channelData}";
 
         return "{$appKey}:" . hash_hmac('sha256', $stringToSign, $appSecret);
@@ -117,13 +119,7 @@ trait HandlesAuthentication
             return;
         }
 
-        if (!isset($this->privateChannels[$channel])) {
-            $this->privateChannels[$channel] = [];
-        }
-
-        $this->privateChannels[$channel][] = $conn;
-        $this->channels[$channel][] = $conn;
-        $this->clientMetadata[$conn->id]['subscribed_channels'][] = $channel;
+        $this->attachToChannel($conn, $channel);
 
         $this->sendToClient($conn, [
             'event' => 'doppar:subscription_succeeded',

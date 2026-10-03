@@ -74,7 +74,9 @@ return [
     'websocket' => [
         'host' => env('WEBSOCKET_HOST', '127.0.0.1'),
         'port' => (int) env('WEBSOCKET_PORT', 6001),
+        'internal_host' => env('WEBSOCKET_INTERNAL_HOST', '127.0.0.1'),
         'internal_port' => (int) env('WEBSOCKET_INTERNAL_PORT', 6002),
+        'ssl' => filter_var(env('WEBSOCKET_SSL', false), FILTER_VALIDATE_BOOLEAN),
         'ssl_cert' => env('WEBSOCKET_SSL_CERT'),
         'ssl_key' => env('WEBSOCKET_SSL_KEY'),
         'max_connections' => (int) env('WEBSOCKET_MAX_CONNECTIONS', 1000),
@@ -94,6 +96,7 @@ return [
 
     'authorize' => [
         'app_key' => env('APP_KEY', 'doppar-app-key'),
+        // Required outside local/testing: the placeholder below is rejected in production.
         'app_secret' => env('WEBSOCKET_APP_SECRET', 'doppar-app-secret'),
         'endpoint' => '/broadcasting/auth',
         'middleware' => [],

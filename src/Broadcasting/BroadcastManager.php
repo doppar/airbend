@@ -9,7 +9,6 @@ use Doppar\Airbend\Broadcasting\Contracts\BroadcastDriver;
 use Doppar\Airbend\Broadcasting\Drivers\WorkermanDriver;
 use Doppar\Airbend\Configuration\ConfigurationManager;
 use Doppar\Airbend\Exceptions\BroadcastConfigurationException;
-use Doppar\Airbend\Monitoring\MetricsCollector;
 use Phaseolies\Support\Facades\Log;
 
 class BroadcastManager
@@ -70,8 +69,6 @@ class BroadcastManager
      */
     public function channel(string|array $channels, BroadcastEvent $event): void
     {
-        MetricsCollector::startTiming();
-
         try {
             // Get channels from event if not explicitly provided
             if (empty($channels)) {
@@ -103,18 +100,13 @@ class BroadcastManager
             }
 
             // Broadcast to each channel separately
-            $successCount = 0;
             foreach ($channels as $channel) {
                 try {
                     $driver->broadcast($channel, $event, [
                         'except' => $this->exceptSocketId,
                         'to_others' => $this->toOthers,
                     ]);
-
-                    $successCount++;
-                    MetricsCollector::recordChannel('broadcast');
                 } catch (\Exception $e) {
-                    MetricsCollector::recordError('broadcast');
                     Log::error('Failed to broadcast to channel', [
                         'channel' => $channel,
                         'event' => $event->broadcastAs(),
@@ -125,7 +117,6 @@ class BroadcastManager
         } finally {
             // Reset flags for next broadcast
             $this->reset();
-            MetricsCollector::endTiming('broadcast');
         }
     }
 

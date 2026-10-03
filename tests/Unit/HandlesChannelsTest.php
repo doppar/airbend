@@ -323,20 +323,14 @@ class HandlesChannelsTest extends TestCase
         $this->assertArrayNotHasKey($channel, $presenceChannels);
     }
 
-    public function testTerminateChannelRemovesFromPrivateChannels()
+    public function testTerminateChannelRemovesPrivateChannelSubscribers()
     {
         $channel = 'private-test';
         $this->subscribeToChannel($this->connections[1], $channel);
 
-        $privateChannelsProperty = $this->handlerReflection->getProperty('privateChannels');
-        $privateChannels = $privateChannelsProperty->getValue($this->handler);
-        $privateChannels[$channel] = [$this->connections[1]];
-        $privateChannelsProperty->setValue($this->handler, $privateChannels);
-
         $this->handler->terminateChannel($channel);
 
-        $privateChannels = $privateChannelsProperty->getValue($this->handler);
-        $this->assertArrayNotHasKey($channel, $privateChannels);
+        $this->assertFalse($this->handler->channelExists($channel));
     }
 
     public function testTerminateNonexistentChannel()

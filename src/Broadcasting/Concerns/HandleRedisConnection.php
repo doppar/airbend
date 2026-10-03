@@ -18,6 +18,8 @@ trait HandleRedisConnection
     {
         try {
             $config  = $this->getConnectionConfig();
+            // A hung Redis must not block the event loop (and every WebSocket client) forever
+            $config += ['timeout' => 5.0, 'read_write_timeout' => 5.0];
             $options = $this->getConnectionOptions();
 
             $this->redis = new Client($config, $options);
@@ -137,7 +139,6 @@ trait HandleRedisConnection
 
         $options = [
             'prefix'            => $redisConfig['prefix'] ?? '',
-            'read_write_timeout' => 0,
             'persistent'        => false,
             'exceptions'        => true,
         ];

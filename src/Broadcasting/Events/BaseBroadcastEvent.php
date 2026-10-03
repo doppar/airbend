@@ -137,7 +137,13 @@ abstract class BaseBroadcastEvent implements BroadcastEvent
      */
     public function isBroadcastingToOthers(): bool
     {
-        return $this->toOthers;
+        if ($this->toOthers) {
+            return true;
+        }
+
+        $attributes = (new \ReflectionClass($this))->getAttributes(BroadcastAttribute::class);
+
+        return !empty($attributes) && $attributes[0]->newInstance()->toOthers;
     }
 
     /**

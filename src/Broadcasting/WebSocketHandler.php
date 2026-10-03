@@ -8,7 +8,6 @@ use Doppar\Airbend\Broadcasting\Concerns\HandlesPresence;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesChannels;
 use Doppar\Airbend\Broadcasting\Concerns\HandlesAuthentication;
 use Doppar\Airbend\Exceptions\WebSocketException;
-use Doppar\Airbend\Monitoring\MetricsCollector;
 use Doppar\Airbend\Configuration\ConfigurationManager;
 
 class WebSocketHandler
@@ -41,14 +40,6 @@ class WebSocketHandler
     protected array $presenceChannels = [];
 
     /**
-     * Private channel subscriptions with auth
-     * Format: ['private-channel' => [TcpConnection, ...]]
-     *
-     * @var array
-     */
-    protected array $privateChannels = [];
-
-    /**
      * Client metadata
      * Format: [connectionId => ['socket_id', 'auth_data', 'last_heartbeat']]
      *
@@ -76,12 +67,10 @@ class WebSocketHandler
             $maxConnections = ConfigurationManager::get('websocket.max_connections', 1000);
             if ($this->clients->count() >= $maxConnections) {
                 $conn->close();
-                MetricsCollector::recordConnection('failed');
                 return;
             }
 
-            $this->clients->attach($conn);
-            MetricsCollector::recordConnection('connect');
+            $this->clients->offsetSet($conn, null);
 
             $socketId = $this->generateSocketId();
             $connectionId = $conn->id;
@@ -104,7 +93,6 @@ class WebSocketHandler
                 ], JSON_THROW_ON_ERROR),
             ]);
         } catch (\Exception $e) {
-            MetricsCollector::recordError('connection');
             Log::error('Error handling new WebSocket connection', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
@@ -121,6 +109,27 @@ class WebSocketHandler
     }
 
     /**
+     * Maximum accepted size of a single client message in bytes
+     *
+     * @var int
+     */
+    public const MAX_MESSAGE_BYTES = 64 * 1024;
+
+    /**
+     * Maximum length of a channel name
+     *
+     * @var int
+     */
+    public const MAX_CHANNEL_LENGTH = 200;
+
+    /**
+     * Maximum channels a single connection may join
+     *
+     * @var int
+     */
+    public const MAX_CHANNELS_PER_CONNECTION = 100;
+
+    /**
      * Handle incoming message
      *
      * @param TcpConnection $from
@@ -133,44 +142,46 @@ class WebSocketHandler
         $metadata = $this->clientMetadata[$fromId] ?? null;
 
         try {
-            MetricsCollector::recordMessage('received');
-            MetricsCollector::startTiming();
-
-            // Validate message size
-            if (strlen($msg) > 64 * 1024) { // 64KB limit
+            if (strlen($msg) > self::MAX_MESSAGE_BYTES) {
                 throw WebSocketException::invalidMessageFormat('Message size exceeds 64KB limit');
             }
 
-            $data = json_decode($msg, true, 512, JSON_THROW_ON_ERROR);
+            $data = json_decode($msg, true, 32, JSON_THROW_ON_ERROR);
 
-            if (!is_array($data) || !isset($data['event'])) {
-                throw WebSocketException::invalidMessageFormat('Missing or invalid event field');
+            if (!is_array($data) || !isset($data['event']) || !is_string($data['event']) || $data['event'] === '') {
+                throw WebSocketException::invalidMessageFormat('Event name must be a non-empty string');
             }
 
             $event = $data['event'];
             $channel = $data['channel'] ?? null;
             $eventData = $data['data'] ?? [];
 
-            // Validate event name
-            if (!is_string($event) || empty($event)) {
-                throw WebSocketException::invalidMessageFormat('Event name must be a non-empty string');
+            if ($channel !== null && !$this->isValidChannelName($channel)) {
+                throw WebSocketException::invalidMessageFormat('Invalid channel name');
             }
 
-            // Update last activity
+            // Pusher-style clients send channel data as a JSON string
+            if (is_string($eventData)) {
+                $decoded = json_decode($eventData, true);
+                $eventData = is_array($decoded) ? $decoded : [];
+            }
+
+            if (!is_array($eventData)) {
+                $eventData = [];
+            }
+
             if ($metadata) {
                 $this->clientMetadata[$fromId]['last_heartbeat'] = time();
             }
 
-            // Route the message based on event type
             match ($event) {
                 'doppar:subscribe' => $this->handleSubscribe($from, $channel, $eventData),
                 'doppar:unsubscribe' => $this->handleUnsubscribe($from, $channel),
                 'doppar:ping' => $this->handlePing($from),
                 'client-event' => $this->handleClientEvent($from, $channel, $eventData),
-                default => $this->handleBroadcast($from, $event, $channel, $eventData),
+                default => throw WebSocketException::invalidMessageFormat('Unknown event'),
             };
         } catch (\JsonException $e) {
-            MetricsCollector::recordError('connection');
             Log::warning('Invalid JSON message received', [
                 'connection_id' => $fromId,
                 'socket_id' => $metadata['socket_id'] ?? 'unknown',
@@ -179,14 +190,34 @@ class WebSocketHandler
             ]);
             $this->sendError($from, 'Invalid JSON format');
         } catch (WebSocketException $e) {
-            MetricsCollector::recordError('connection');
             Log::warning('WebSocket message error', [
                 'connection_id' => $fromId,
                 'socket_id' => $metadata['socket_id'] ?? 'unknown',
                 'error' => $e->getMessage(),
             ]);
             $this->sendError($from, $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Unexpected error handling WebSocket message', [
+                'connection_id' => $fromId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $this->sendError($from, 'Internal server error');
         }
+    }
+
+    /**
+     * Determine whether a value is an acceptable channel name
+     *
+     * @param mixed $channel
+     * @return bool
+     */
+    protected function isValidChannelName(mixed $channel): bool
+    {
+        return is_string($channel)
+            && $channel !== ''
+            && strlen($channel) <= self::MAX_CHANNEL_LENGTH
+            && preg_match('/^[A-Za-z0-9_\-=@,.;:]+$/', $channel) === 1;
     }
 
     /**
@@ -202,8 +233,7 @@ class WebSocketHandler
 
         try {
             $this->removeFromAllChannels($conn);
-            $this->clients->detach($conn);
-            MetricsCollector::recordConnection('disconnect');
+            $this->clients->offsetUnset($conn);
             unset($this->clientMetadata[$connectionId]);
         } catch (\Exception $e) {
             Log::error('Error during connection close cleanup', [
@@ -224,9 +254,6 @@ class WebSocketHandler
     public function onError(TcpConnection $conn, int $code, string $msg): void
     {
         $connectionId = $conn->id;
-        $this->clientMetadata[$connectionId] ?? null;
-
-        MetricsCollector::recordError('connection');
 
         try {
             $conn->close();
@@ -248,8 +275,21 @@ class WebSocketHandler
      */
     protected function handleSubscribe(TcpConnection $conn, ?string $channel, array $data): void
     {
-        if (!$channel) {
+        if ($channel === null) {
             $this->sendError($conn, 'Channel name required');
+            return;
+        }
+
+        if (in_array($channel, $this->clientMetadata[$conn->id]['subscribed_channels'] ?? [], true)) {
+            $this->sendToClient($conn, [
+                'event' => 'doppar:subscription_succeeded',
+                'channel' => $channel,
+            ]);
+            return;
+        }
+
+        if (count($this->clientMetadata[$conn->id]['subscribed_channels'] ?? []) >= self::MAX_CHANNELS_PER_CONNECTION) {
+            $this->sendError($conn, 'Too many channel subscriptions');
             return;
         }
 
@@ -272,13 +312,7 @@ class WebSocketHandler
      */
     protected function subscribeToPublicChannel(TcpConnection $conn, string $channel): void
     {
-        if (!isset($this->channels[$channel])) {
-            $this->channels[$channel] = [];
-        }
-
-        $this->channels[$channel][] = $conn;
-        $connectionId = $conn->id;
-        $this->clientMetadata[$connectionId]['subscribed_channels'][] = $channel;
+        $this->attachToChannel($conn, $channel);
 
         $this->sendToClient($conn, [
             'event' => 'doppar:subscription_succeeded',
@@ -295,7 +329,7 @@ class WebSocketHandler
      */
     protected function handleUnsubscribe(TcpConnection $conn, ?string $channel): void
     {
-        if (!$channel) {
+        if ($channel === null || !in_array($channel, $this->clientMetadata[$conn->id]['subscribed_channels'] ?? [], true)) {
             return;
         }
 
@@ -324,41 +358,41 @@ class WebSocketHandler
      * Handle client-triggered events
      *
      * @param TcpConnection $from
-     * @param string $channel
+     * @param string|null $channel
      * @param array $data
      * @return void
      */
-    protected function handleClientEvent(TcpConnection $from, string $channel, array $data): void
+    protected function handleClientEvent(TcpConnection $from, ?string $channel, array $data): void
     {
-        // Client events are only allowed on private/presence channels
+        if ($channel === null) {
+            $this->sendError($from, 'Channel name required');
+            return;
+        }
+
         if (!str_starts_with($channel, 'private-') && !str_starts_with($channel, 'presence-')) {
             $this->sendError($from, 'Client events only allowed on private/presence channels');
             return;
         }
 
-        // Broadcast to all channel subscribers except sender
-        $message = array_merge($data, ['channel' => $channel]);
-        $this->broadcastToChannel($channel, $message, $from->id);
-    }
-
-    /**
-     * Handle server-side broadcast
-     *
-     * @param TcpConnection $from
-     * @param string $event
-     * @param string|null $channel
-     * @param array $data
-     * @return void
-     */
-    protected function handleBroadcast(TcpConnection $from, string $event, ?string $channel, array $data): void
-    {
-        if ($channel) {
-            $this->broadcastToChannel($channel, [
-                'event' => $event,
-                'channel' => $channel,
-                'data' => $data,
-            ]);
+        if (!in_array($channel, $this->clientMetadata[$from->id]['subscribed_channels'] ?? [], true)) {
+            $this->sendError($from, 'You must be subscribed to the channel to send client events');
+            return;
         }
+
+        $innerEvent = $data['event'] ?? null;
+
+        if (!is_string($innerEvent) || !str_starts_with($innerEvent, 'client-') || $innerEvent === 'client-event') {
+            $this->sendError($from, 'Client event names must start with "client-"');
+            return;
+        }
+
+        $payload = $data['data'] ?? [];
+
+        $this->broadcastToChannel($channel, [
+            'event' => $innerEvent,
+            'channel' => $channel,
+            'data' => is_string($payload) ? $payload : json_encode($payload),
+        ], $from->id);
     }
 
     /**
@@ -385,6 +419,25 @@ class WebSocketHandler
     }
 
     /**
+     * Register a connection as a subscriber of a channel
+     *
+     * @param TcpConnection $conn
+     * @param string $channel
+     * @return void
+     */
+    protected function attachToChannel(TcpConnection $conn, string $channel): void
+    {
+        foreach ($this->channels[$channel] ?? [] as $existing) {
+            if ($existing->id === $conn->id) {
+                return;
+            }
+        }
+
+        $this->channels[$channel][] = $conn;
+        $this->clientMetadata[$conn->id]['subscribed_channels'][] = $channel;
+    }
+
+    /**
      * Send message to specific client
      *
      * @param TcpConnection $conn
@@ -393,7 +446,14 @@ class WebSocketHandler
      */
     public function sendToClient(TcpConnection $conn, array $message): void
     {
-        $conn->send(json_encode($message));
+        $encoded = json_encode($message, JSON_INVALID_UTF8_SUBSTITUTE);
+
+        if ($encoded === false) {
+            Log::warning('Failed to encode outgoing WebSocket message', ['error' => json_last_error_msg()]);
+            return;
+        }
+
+        $conn->send($encoded);
     }
 
     /**
@@ -420,6 +480,13 @@ class WebSocketHandler
      */
     protected function removeFromChannel(TcpConnection $conn, string $channel): void
     {
+        if (isset($this->clientMetadata[$conn->id]['subscribed_channels'])) {
+            $this->clientMetadata[$conn->id]['subscribed_channels'] = array_values(array_diff(
+                $this->clientMetadata[$conn->id]['subscribed_channels'],
+                [$channel]
+            ));
+        }
+
         if (isset($this->channels[$channel])) {
             $this->channels[$channel] = array_filter(
                 $this->channels[$channel],
@@ -484,7 +551,7 @@ class WebSocketHandler
      */
     public function cleanupStaleConnections(): void
     {
-        $timeout = 180; // 3 minutes
+        $timeout = (int) ConfigurationManager::get('websocket.connection_timeout', 180);
         $now = time();
 
         foreach ($this->clients as $client) {

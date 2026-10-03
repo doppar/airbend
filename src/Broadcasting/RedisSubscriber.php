@@ -11,6 +11,13 @@ class RedisSubscriber
     use HandleRedisConnection;
 
     /**
+     * Maximum messages handled in one polling tick
+     *
+     * @var int
+     */
+    protected const MAX_MESSAGES_PER_TICK = 100;
+
+    /**
      * Redis connection
      *
      * @var \Predis\Client
@@ -95,12 +102,17 @@ class RedisSubscriber
     protected function pollMessages(): void
     {
         try {
-            $message = $this->redis->rpop($this->pubsubChannel);
+            // Drain a bounded batch per tick so a burst is not throttled to one message per interval
+            for ($i = 0; $i < self::MAX_MESSAGES_PER_TICK; $i++) {
+                $message = $this->redis->rpop($this->pubsubChannel);
 
-            if ($message) {
+                if (!is_string($message) || $message === '') {
+                    break;
+                }
+
                 $this->processMessage($message);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error("Error polling Redis: " . $e->getMessage());
             $this->reconnect();
         }
@@ -117,7 +129,14 @@ class RedisSubscriber
         try {
             $data = json_decode($message, true);
 
-            if (!$data || !isset($data['event'], $data['channel'])) {
+            if (
+                !is_array($data)
+                || !isset($data['event'], $data['channel'])
+                || !is_string($data['event'])
+                || !is_string($data['channel'])
+                || $data['event'] === ''
+                || $data['channel'] === ''
+            ) {
                 Log::warning("Invalid broadcast message format", ['message' => $message]);
                 return;
             }
@@ -128,7 +147,7 @@ class RedisSubscriber
             $exceptSocketId = $data['socket_id'] ?? null;
 
             $exceptConnectionId = null;
-            if ($exceptSocketId) {
+            if (is_string($exceptSocketId) && $exceptSocketId !== '') {
                 $exceptConnectionId = $this->findConnectionIdBySocketId($exceptSocketId);
             }
 
@@ -138,7 +157,7 @@ class RedisSubscriber
                 'channel' => $channel,
                 'data' => is_string($eventData) ? $eventData : json_encode($eventData),
             ], $exceptConnectionId);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error("Error processing broadcast message: " . $e->getMessage(), [
                 'message' => substr($message, 0, 500),
                 'trace' => $e->getTraceAsString()

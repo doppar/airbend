@@ -40,16 +40,13 @@ trait HandlesPresence
             ];
         }
 
-        $this->presenceChannels[$channel][$userId]['connections'][] = $conn->id;
+        if (!in_array($conn->id, $this->presenceChannels[$channel][$userId]['connections'], true)) {
+            $this->presenceChannels[$channel][$userId]['connections'][] = $conn->id;
+        }
 
         // Add to regular channel subscriptions
-        if (!isset($this->channels[$channel])) {
-            $this->channels[$channel] = [];
-        }
-        $this->channels[$channel][] = $conn;
-        $this->clientMetadata[$conn->id]['subscribed_channels'][] = $channel;
-        $this->clientMetadata[$conn->id]['presence_user_id'] = $userId;
-        $this->clientMetadata[$conn->id]['presence_channel'] = $channel;
+        $this->attachToChannel($conn, $channel);
+        $this->clientMetadata[$conn->id]['presence_users'][$channel] = $userId;
 
         // Send subscription success with current members
         $presenceData = [
@@ -94,9 +91,10 @@ trait HandlesPresence
             return;
         }
 
-        $userId = $this->clientMetadata[$conn->id]['presence_user_id'] ?? null;
+        $userId = $this->clientMetadata[$conn->id]['presence_users'][$channel] ?? null;
+        unset($this->clientMetadata[$conn->id]['presence_users'][$channel]);
 
-        if (!$userId || !isset($this->presenceChannels[$channel][$userId])) {
+        if ($userId === null || !isset($this->presenceChannels[$channel][$userId])) {
             return;
         }
 

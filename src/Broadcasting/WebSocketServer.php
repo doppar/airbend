@@ -7,7 +7,6 @@ use Workerman\Worker;
 use Workerman\Connection\TcpConnection;
 use Workerman\Timer;
 use Doppar\Airbend\Configuration\ConfigurationManager;
-use Doppar\Airbend\Monitoring\MetricsCollector;
 use Doppar\Airbend\Exceptions\WebSocketException;
 use Channel\Server as ChannelServer;
 use Channel\Client as ChannelClient;
@@ -34,6 +33,13 @@ class WebSocketServer
      * @var int
      */
     protected int $internalPort;
+
+    /**
+     * Interface the internal broadcast server binds to (loopback by default)
+     *
+     * @var string
+     */
+    protected string $internalHost;
 
     /**
      * Enable SSL/TLS
@@ -97,6 +103,7 @@ class WebSocketServer
         $this->host = $host ?? ConfigurationManager::get('websocket.host', '127.0.0.1');
         $this->port = $port ?? ConfigurationManager::get('websocket.port', 6001);
         $this->internalPort = ConfigurationManager::get('websocket.internal_port', 6002);
+        $this->internalHost = ConfigurationManager::get('websocket.internal_host', '127.0.0.1');
         $this->ssl = $ssl ?? ConfigurationManager::get('websocket.ssl', false);
         $this->handler = $handler ?? new WebSocketHandler();
         $this->broadcastDriver = ConfigurationManager::get('default');
@@ -111,6 +118,10 @@ class WebSocketServer
      */
     public function run(): void
     {
+        // Fail fast: a server that cannot verify authorizations must not start
+        ConfigurationManager::appKey();
+        ConfigurationManager::appSecret();
+
         if ($this->broadcastDriver === 'workerman') {
             $channelHost = ConfigurationManager::get('websocket.channel_host', '127.0.0.1');
             $channelPort = ConfigurationManager::get('websocket.channel_port', 2206);
@@ -172,11 +183,20 @@ class WebSocketServer
         $server = $this;
 
         $worker->onConnect = function (TcpConnection $connection) use ($server) {
+            // Never let an uncaught error in a callback stop the whole worker (and every client)
+            $connection->errorHandler = function (\Throwable $e) {
+                Log::error('Unhandled WebSocket connection error', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            };
+            $connection->maxPackageSize = WebSocketHandler::MAX_MESSAGE_BYTES;
+
             $server->handler->onOpen($connection);
         };
 
         $worker->onMessage = function (TcpConnection $connection, $data) use ($server) {
-            $server->handler->onMessage($connection, $data);
+            $server->handler->onMessage($connection, (string) $data);
         };
 
         $worker->onClose = function (TcpConnection $connection) use ($server) {
@@ -196,12 +216,12 @@ class WebSocketServer
                 ChannelClient::connect($channelHost, $channelPort);
 
                 ChannelClient::on('airbend.broadcast', function ($data) use ($server) {
-                    $event = $data['event'] ?? '';
-                    $channel = $data['channel'] ?? '';
+                    $event = is_array($data) ? ($data['event'] ?? '') : '';
+                    $channel = is_array($data) ? ($data['channel'] ?? '') : '';
                     $messageData = $data['data'] ?? [];
                     $exceptSocketId = $data['socket_id'] ?? null;
 
-                    if (empty($event) || empty($channel)) {
+                    if (!is_string($event) || !is_string($channel) || $event === '' || $channel === '') {
                         Log::warning("Invalid broadcast message from Channel", $data);
                         return;
                     }
@@ -213,7 +233,7 @@ class WebSocketServer
                     ];
 
                     $exceptConnectionId = null;
-                    if ($exceptSocketId) {
+                    if (is_string($exceptSocketId) && $exceptSocketId !== '') {
                         $exceptConnectionId = $server->findConnectionIdBySocketId($exceptSocketId);
                     }
 
@@ -252,13 +272,17 @@ class WebSocketServer
      */
     protected function createInternalServer(): void
     {
-        $this->internalServer = new Worker("tcp://{$this->host}:{$this->internalPort}");
+        $this->internalServer = new Worker("tcp://{$this->internalHost}:{$this->internalPort}");
         $this->internalServer->name = 'Internal Broadcast Server';
         $this->internalServer->count = 1;
 
         $server = $this;
 
         $this->internalServer->onConnect = function (TcpConnection $connection) use ($server) {
+            $connection->maxPackageSize = 1024 * 1024;
+            $connection->errorHandler = function (\Throwable $e) {
+                Log::error('Unhandled internal server error', ['error' => $e->getMessage()]);
+            };
             $server->onInternalConnect($connection);
         };
 
@@ -307,35 +331,35 @@ class WebSocketServer
         $connection->lastActivity = time();
 
         try {
-            $message = json_decode(trim($data), true);
+            $message = InternalMessageSigner::verify(trim((string) $data));
 
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                Log::warning("Invalid JSON from internal client: " . json_last_error_msg());
+            if ($message === null) {
+                Log::warning('Rejected unsigned, forged or expired internal broadcast', [
+                    'remote' => $connection->getRemoteAddress(),
+                ]);
                 $connection->send(json_encode([
                     'type' => 'error',
-                    'message' => 'Invalid JSON',
-                    'error' => json_last_error_msg(),
+                    'message' => 'Invalid signature',
                 ]) . "\n");
+
                 return;
             }
 
             $this->handleInternalBroadcast($message);
 
-            $ack = json_encode([
+            $connection->send(json_encode([
                 'type' => 'ack',
                 'message_id' => $message['message_id'] ?? null,
                 'status' => 'processed',
-            ]) . "\n";
-
-            $connection->send($ack);
-        } catch (\Exception $e) {
-            Log::error("Error processing internal message", [
+            ]) . "\n");
+        } catch (\Throwable $e) {
+            Log::error('Error processing internal message', [
                 'error' => $e->getMessage(),
             ]);
 
             $connection->send(json_encode([
                 'type' => 'error',
-                'message' => $e->getMessage(),
+                'message' => 'Internal error',
             ]) . "\n");
         }
     }
@@ -372,7 +396,7 @@ class WebSocketServer
         $data = $message['data'] ?? [];
         $exceptSocketId = $message['socket_id'] ?? null;
 
-        if (empty($event) || empty($channel)) {
+        if (!is_string($event) || !is_string($channel) || $event === '' || $channel === '') {
             Log::warning("Invalid broadcast message - missing event or channel", $message);
             return;
         }
@@ -385,8 +409,6 @@ class WebSocketServer
         ];
 
         ChannelClient::publish('airbend.broadcast', $channelMessage);
-
-        MetricsCollector::recordMessage('broadcasted');
     }
 
 
@@ -462,41 +484,6 @@ class WebSocketServer
 
         if ($cleaned > 0) {
             Log::info("Cleaned up {$cleaned} stale internal connections");
-        }
-    }
-
-    /**
-     * Log server statistics
-     *
-     * @param WebSocketHandler $handler
-     * @return void
-     */
-    protected function logStatistics(WebSocketHandler $handler): void
-    {
-        try {
-            $stats = $handler->getChannelStats();
-            $metrics = MetricsCollector::getMetrics();
-            $performanceStats = MetricsCollector::getPerformanceStats();
-
-            $logData = [
-                'uptime' => $this->getUptimeFormatted(),
-                'broadcast_driver' => $this->broadcastDriver,
-                'ws_connections' => $stats['total_connections'] ?? 0,
-                'channels' => $stats['total_channels'] ?? 0,
-                'messages' => $metrics['messages'],
-                'errors' => $metrics['errors'],
-                'memory_usage_mb' => round(memory_get_usage(true) / 1024 / 1024, 2),
-            ];
-
-            if ($this->broadcastDriver === 'workerman') {
-                $logData['internal_connections'] = count($this->internalConnections);
-            }
-
-            Log::info('WebSocket Server Statistics', $logData);
-        } catch (\Exception $e) {
-            Log::error('Error logging statistics', [
-                'error' => $e->getMessage(),
-            ]);
         }
     }
 
